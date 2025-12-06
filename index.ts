@@ -15,7 +15,6 @@ console.log();
     await dbConnect();
     app.use(express.json());
     app.use(routers);
-
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   } catch (error) {
     console.error("Something went wrong:", error);
