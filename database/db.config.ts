@@ -1,12 +1,12 @@
 import mongoose from "mongoose";
 
 export const dbConnect = async (): Promise<void> => {
-  const mongoUri = process.env.MONGO_URI;
+  const mongoUri = process.env.DB_URL;
   console.log(mongoUri);
 
   if (!mongoUri) {
     console.error("MONGO_URI is not defined in .env");
-    process.exit(1); 
+    process.exit(1);
   }
 
   try {

@@ -1,7 +1,7 @@
-import { Router, Request, Response } from "express";
+import express from "express";
 import apiRoutes from "./api";
 
-const router: Router = Router();
+const router = express.Router();
 
 router.use("/api/v1", apiRoutes);
 
