@@ -6,5 +6,5 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const api_1 = __importDefault(require("./api"));
 const router = express_1.default.Router();
-router.use("/api/v1", api_1.default);
+router.use(process.env.BASE_URL, api_1.default);
 exports.default = router;

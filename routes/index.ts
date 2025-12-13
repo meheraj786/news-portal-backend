@@ -3,6 +3,6 @@ import apiRoutes from "./api";
 
 const router = express.Router();
 
-router.use("/api/v1", apiRoutes);
+router.use(process.env.BASE_URL!, apiRoutes);
 
 export default router;

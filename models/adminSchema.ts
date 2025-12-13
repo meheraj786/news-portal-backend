@@ -1,50 +1,101 @@
-import mongoose, { Schema } from "mongoose";
+import mongoose, { Schema, Document } from "mongoose";
 import bcrypt from "bcrypt";
 
 export interface IAdmin extends Document {
   username: string;
   email: string;
   password: string;
-  createdAt: Date;
+  // otp fields
+  otp: string | null;
+  otpExpiry: Date | null;
+  lastOtpRequest: Date | null;
+  otpAttempts: number;
+  lockedUntil: Date | null;
+
+  resetSessionActive: boolean;
+  resetSessionExpiry: Date | null;
+  otpVerified: boolean;
+  compareField: (filed: string, value: string) => Promise<boolean>;
 }
 
-const adminSchema = new Schema<IAdmin>({
-  username: {
-    type: String,
-    required: true,
-    minlength: [2, "username must be at least 2 characters"],
-    maxlength: [30, "username cannot exceed 30 characters"],
+const adminSchema = new Schema<IAdmin>(
+  {
+    username: {
+      type: String,
+      required: true,
+      minlength: [2, "username must be at least 2 characters"],
+      maxlength: [30, "username cannot exceed 30 characters"],
+    },
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      required: [true, "Email is required"],
+      unique: true,
+      match: [/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, "Please provide a valid email address"],
+    },
+    password: {
+      type: String,
+      required: [true, "Password is required"],
+      minlength: [8, "password must be at least 8 characters"],
+      select: false,
+    },
+    // otp fields
+    otp: { type: String, select: false },
+    otpExpiry: { type: Date, select: false },
+    lastOtpRequest: { type: Date, select: false },
+    otpAttempts: { type: Number, default: 0, select: false },
+    lockedUntil: { type: Date, select: false },
+    //reset password
+    resetSessionActive: { type: Boolean, default: false, select: false },
+    resetSessionExpiry: { type: Date, select: false },
+    otpVerified: { type: Boolean, default: false, select: false },
   },
-  email: {
-    type: String,
-    trim: true,
-    lowercase: true,
-    required: [true, "Email is required"],
-    unique: true,
-    match: [/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, "Please provide a valid email address"],
-  },
-  password: {
-    type: String,
-    required: [true, "Password is required"],
-    minlength: [8, "password must be at least 8 characters"],
-    select: false,
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
+  {
+    timestamps: true,
+    toJSON: {
+      transform: function (doc, ret: any) {
+        delete ret.password;
+        delete ret.otp;
+        delete ret.otpExpiry;
+        delete ret.otpAttempts;
+        delete ret.lockedUntil;
+        delete ret.lastOtpRequest;
+        delete ret.resetSessionActive;
+        delete ret.resetSessionExpiry;
+        delete ret.otpVerified;
+        delete ret.__v;
+        return ret;
+      },
+    },
+  }
+);
+
+//password and otp hashing middleware
+adminSchema.pre("save", async function (next) {
+  if (!this.isModified("password") && !this.isModified("otp")) return next();
+  try {
+    if (this.isModified("password")) this.password = await bcrypt.hash(this.password, 10);
+    if (this.otp && this.isModified("otp")) this.otp = await bcrypt.hash(this.otp, 10);
+
+    next();
+  } catch (error: any) {
+    next(error);
+  }
 });
 
-//password hashing middleware
-// adminSchema.pre("save", async function (this: any, next: NextFunction) {
-//   if (!this.isModified("password")) return next();
-//   this.password = await bcrypt.hash(this.password, 10);
-//   next();
-// });
-
-//custom instance method to compare password
-adminSchema.methods.comparePassword = async function (password: string) {
-  return await bcrypt.compare(password, this.password);
+//custom instance method to compare password or otp
+adminSchema.methods.compareField = async function (fieldType: "password" | "otp", value: string): Promise<boolean> {
+  if (fieldType === "password") {
+    return await bcrypt.compare(value, this.password);
+  } else if (fieldType === "otp") {
+    if (this.otp) {
+      return await bcrypt.compare(value, this.otp);
+    } else {
+      return false;
+    }
+  }
+  return false;
 };
 
 const Admin = mongoose.model("Admin", adminSchema);

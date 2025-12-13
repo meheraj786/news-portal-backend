@@ -59,20 +59,63 @@ const adminSchema = new mongoose_1.Schema({
         minlength: [8, "password must be at least 8 characters"],
         select: false,
     },
-    createdAt: {
-        type: Date,
-        default: Date.now,
+    // otp fields
+    otp: { type: String, select: false },
+    otpExpiry: { type: Date, select: false },
+    lastOtpRequest: { type: Date, select: false },
+    otpAttempts: { type: Number, default: 0, select: false },
+    lockedUntil: { type: Date, select: false },
+    //reset password
+    resetSessionActive: { type: Boolean, default: false, select: false },
+    resetSessionExpiry: { type: Date, select: false },
+    otpVerified: { type: Boolean, default: false, select: false },
+}, {
+    timestamps: true,
+    toJSON: {
+        transform: function (doc, ret) {
+            delete ret.password;
+            delete ret.otp;
+            delete ret.otpExpiry;
+            delete ret.otpAttempts;
+            delete ret.lockedUntil;
+            delete ret.lastOtpRequest;
+            delete ret.resetSessionActive;
+            delete ret.resetSessionExpiry;
+            delete ret.otpVerified;
+            delete ret.__v;
+            return ret;
+        },
     },
 });
-//password hashing middleware
-// adminSchema.pre("save", async function (this: any, next: NextFunction) {
-//   if (!this.isModified("password")) return next();
-//   this.password = await bcrypt.hash(this.password, 10);
-//   next();
-// });
-//custom instance method to compare password
-adminSchema.methods.comparePassword = async function (password) {
-    return await bcrypt_1.default.compare(password, this.password);
+//password and otp hashing middleware
+adminSchema.pre("save", async function (next) {
+    if (!this.isModified("password") && !this.isModified("otp"))
+        return next();
+    try {
+        if (this.isModified("password"))
+            this.password = await bcrypt_1.default.hash(this.password, 10);
+        if (this.otp && this.isModified("otp"))
+            this.otp = await bcrypt_1.default.hash(this.otp, 10);
+        next();
+    }
+    catch (error) {
+        next(error);
+    }
+});
+//custom instance method to compare password or otp
+adminSchema.methods.compareField = async function (fieldType, value) {
+    if (fieldType === "password") {
+        return await bcrypt_1.default.compare(value, this.password);
+    }
+    else if (fieldType === "otp") {
+        if (this.otp) {
+            return await bcrypt_1.default.compare(value, this.otp);
+        }
+        else {
+            return false;
+        }
+    }
+    return false;
 };
 const Admin = mongoose_1.default.model("Admin", adminSchema);
 exports.default = Admin;

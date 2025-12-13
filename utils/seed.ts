@@ -1,15 +1,13 @@
+import mongoose from "mongoose";
 import Admin from "../models/adminSchema";
-
-const mongoose = require("mongoose");
 
 require("dotenv").config();
 
 const seedSuperAdmin = async () => {
   try {
-    await mongoose.connect(process.env.DB_URL);
-    console.log("DB Connected");
+    await mongoose.connect(process.env.DB_URL!);
 
-    const superAdminEmail = "superadmin@system.com";
+    const superAdminEmail = process.env.ADMIN_EMAIL;
 
     const exists = await Admin.findOne({ email: superAdminEmail });
 
