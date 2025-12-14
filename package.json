@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "start": "tsc && node dist/index.js",
-    "seed": "node dist/utils/seed.js"
+    "seed": "node dist/utils/seed.js",
+    "prepare": "husky && husky install"
   },
   "repository": {
     "type": "git",

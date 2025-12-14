@@ -175,9 +175,9 @@ export const verifyOTP = async (req: Request, res: Response, next: NextFunction)
 };
 
 export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
-  const { email, newPassword } = req.body;
-  if (!email || !newPassword) return next(createError("Email and new password are required", 400));
-  if (newPassword.length < 8) return next(createError("Password must be at least 8 characters", 400));
+  const { email, password } = req.body;
+  if (!email || !password) return next(createError("Email and password are required", 400));
+  if (password.length < 8) return next(createError("Password must be at least 8 characters", 400));
 
   const admin = await Admin.findOne({ email }).select("+password +resetSessionActive +resetSessionExpiry +otpVerified");
   if (!admin) return next(createError("Admin not found.", 404));
@@ -196,7 +196,7 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
   }
 
   // update password and clear the reset seassion
-  admin.password = newPassword;
+  admin.password = password;
   admin.resetSessionActive = false;
   admin.resetSessionExpiry = null;
   admin.otpVerified = false;
