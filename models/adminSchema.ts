@@ -15,7 +15,7 @@ export interface IAdmin extends Document {
   resetSessionActive: boolean;
   resetSessionExpiry: Date | null;
   otpVerified: boolean;
-  compareField: (filed: string, value: string) => Promise<boolean>;
+  compareField: (field: string, value: string) => Promise<boolean>;
 }
 
 const adminSchema = new Schema<IAdmin>(
@@ -85,10 +85,10 @@ adminSchema.pre("save", async function (next) {
 });
 
 //custom instance method to compare password or otp
-adminSchema.methods.compareField = async function (fieldType: "password" | "otp", value: string): Promise<boolean> {
-  if (fieldType === "password") {
+adminSchema.methods.compareField = async function (field: "password" | "otp", value: string): Promise<boolean> {
+  if (field === "password") {
     return await bcrypt.compare(value, this.password);
-  } else if (fieldType === "otp") {
+  } else if (field === "otp") {
     if (this.otp) {
       return await bcrypt.compare(value, this.otp);
     } else {
@@ -98,5 +98,5 @@ adminSchema.methods.compareField = async function (fieldType: "password" | "otp"
   return false;
 };
 
-const Admin = mongoose.model("Admin", adminSchema);
+const Admin = mongoose.model<IAdmin>("Admin", adminSchema);
 export default Admin;
