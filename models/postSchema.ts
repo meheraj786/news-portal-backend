@@ -6,6 +6,7 @@ export interface IPost extends Document {
   category: Types.ObjectId;
   image: string;
   isDraft?: boolean;
+  tags?: string[];
   createdAt?: Date;
   updatedAt?: Date;
   views?: number;
@@ -34,6 +35,13 @@ const postSchema = new Schema<IPost>(
       required: true,
       minlength: 2,
     },
+    tags: [
+      {
+        type: String,
+        required: true,
+        minlength: 2,
+        trim: true,
+    }],
     isDraft: {
       type: Boolean,
       default: false,
