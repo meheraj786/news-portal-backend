@@ -14,6 +14,9 @@ interface AuthRequest extends Request {
 
 export const verifyAuthToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+  console.log(req.cookies);
+  
+    
     const token = req.cookies?.accessToken || req.headers.authorization?.split(" ")[1];
     if (!token) {
       return next(createError("Not authorized. Please login.", 401));
