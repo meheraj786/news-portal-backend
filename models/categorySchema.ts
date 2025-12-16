@@ -28,7 +28,7 @@ const categorySchema = new Schema(
     },
   },
   {
-    timestamps: true, // createdAt, updatedAt
+    timestamps: true,
     toJSON: {
       transform: function (doc, ret: any) {
         delete ret.__v;
@@ -38,7 +38,6 @@ const categorySchema = new Schema(
   }
 );
 
-// Auto-generate slug before saving
 categorySchema.pre("save", function (next) {
   if (this.isModified("name")) {
     this.slug = slugify(this.name, { lower: true, strict: true });
