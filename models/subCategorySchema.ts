@@ -5,14 +5,13 @@ const subCategorySchema = new Schema(
   {
     name: {
       type: String,
-      required: [true, "subcategory name is required"],
+      required: [true, "Subcategory name is required"],
       trim: true,
-      minlength: [2, "subcategory name must be at least 2 characters"],
-      maxlength: [50, "subcategory name cannot exceed 50 characters"],
+      minlength: [2, "Subcategory name must be at least 2 characters"],
+      maxlength: [50, "Subcategory name cannot exceed 50 characters"],
     },
     slug: {
       type: String,
-      required: true,
       lowercase: true,
       trim: true,
     },
@@ -29,13 +28,7 @@ const subCategorySchema = new Schema(
     },
   },
   {
-    timestamps: true, // createdAt, updatedAt
-    toJSON: {
-      transform: function (doc, ret: any) {
-        delete ret.__v;
-        return ret;
-      },
-    },
+    timestamps: true,
   }
 );
 
@@ -47,6 +40,7 @@ subCategorySchema.pre("save", function (next) {
   next();
 });
 
+// Ensure unique slug per category
 subCategorySchema.index({ slug: 1, category: 1 }, { unique: true });
 
 const SubCategory = mongoose.model("SubCategory", subCategorySchema);

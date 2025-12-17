@@ -1,81 +1,60 @@
-import { NextFunction, Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { createError } from "../utils/createError";
 import Category from "../models/categorySchema";
 import SubCategory from "../models/subCategorySchema";
 
+// CREATE
 export const createSubCategory = async (req: Request, res: Response, next: NextFunction) => {
   const { name, categoryId, isActive } = req.body;
-
-  if (!name) return next(createError("Subcategory name is required", 400));
-  if (!categoryId) return next(createError("Category ID is required", 400));
+  if (!name || !categoryId) throw createError("Name and Category ID required", 400);
 
   const category = await Category.findById(categoryId);
-  if (!category) return next(createError("Category not found", 404));
+  if (!category) throw createError("Parent Category not found", 404);
 
   const subCategory = new SubCategory({
     name,
     category: categoryId,
-    isActive: isActive !== undefined ? isActive : true,
+    isActive: isActive ?? true,
   });
   await subCategory.save();
 
-  res.status(201).json({
-    success: true,
-    message: "Subcategory created successfully",
-    data: subCategory,
+  await Category.findByIdAndUpdate(categoryId, {
+    $push: { subCategories: subCategory._id },
   });
+
+  res.status(201).json({ success: true, data: subCategory });
 };
 
-export const getAllSubCategories = async (req: Request, res: Response, next: NextFunction) => {
-  const { isActive, categoryId } = req.query;
-
-  const filter: any = {};
-  if (isActive !== undefined) filter.isActive = isActive === "true";
-  if (categoryId) filter.category = categoryId;
-
-  const subCategories = await SubCategory.find(filter).populate("category", "name slug").sort({ createdAt: -1 });
-
-  res.status(200).json({
-    success: true,
-    count: subCategories.length,
-    data: subCategories,
-  });
-};
-
-export const getSubCategoryById = async (req: Request, res: Response, next: NextFunction) => {
+// DELETE
+export const deleteSubCategory = async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
+  const subCategory = await SubCategory.findById(id);
+  if (!subCategory) throw createError("Subcategory not found", 404);
 
-  const subCategory = await SubCategory.findById(id).populate("category", "name slug");
-  if (!subCategory) return next(createError("Subcategory not found", 404));
-
-  res.status(200).json({
-    success: true,
-    data: subCategory,
+  await Category.findByIdAndUpdate(subCategory.category, {
+    $pull: { subCategories: subCategory._id },
   });
+
+  await SubCategory.findByIdAndDelete(id);
+
+  res.status(200).json({ success: true, message: "Deleted successfully" });
 };
 
-export const getSubCategoryBySlug = async (req: Request, res: Response, next: NextFunction) => {
-  const { slug, categoryId } = req.params;
-
-  const subCategory = await SubCategory.findOne({ slug, category: categoryId }).populate("category", "name slug");
-  if (!subCategory) return next(createError("Subcategory not found", 404));
-
-  res.status(200).json({
-    success: true,
-    data: subCategory,
-  });
-};
-
+// UPDATE
 export const updateSubCategory = async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
   const { name, categoryId, isActive } = req.body;
 
   const subCategory = await SubCategory.findById(id);
-  if (!subCategory) return next(createError("Subcategory not found", 404));
+  if (!subCategory) throw createError("Subcategory not found", 404);
 
-  if (categoryId) {
-    const category = await Category.findById(categoryId);
-    if (!category) return next(createError("Category not found", 404));
+  if (categoryId && categoryId !== subCategory.category.toString()) {
+    await Category.findByIdAndUpdate(subCategory.category, {
+      $pull: { subCategories: subCategory._id },
+    });
+    await Category.findByIdAndUpdate(categoryId, {
+      $push: { subCategories: subCategory._id },
+    });
     subCategory.category = categoryId;
   }
 
@@ -83,40 +62,41 @@ export const updateSubCategory = async (req: Request, res: Response, next: NextF
   if (isActive !== undefined) subCategory.isActive = isActive;
 
   await subCategory.save();
-
-  res.status(200).json({
-    success: true,
-    message: "Subcategory updated successfully",
-    data: subCategory,
-  });
+  res.status(200).json({ success: true, data: subCategory });
 };
 
+// GET ALL
+export const getAllSubCategories = async (req: Request, res: Response, next: NextFunction) => {
+  const { isActive, categoryId } = req.query;
+  const filter: any = {};
+  if (isActive !== undefined) filter.isActive = isActive === "true";
+  if (categoryId) filter.category = categoryId;
+
+  const subCategories = await SubCategory.find(filter).populate("category", "name slug").sort({ createdAt: -1 });
+
+  res.status(200).json({ success: true, count: subCategories.length, data: subCategories });
+};
+
+// GET BY ID
+export const getSubCategoryById = async (req: Request, res: Response, next: NextFunction) => {
+  const subCategory = await SubCategory.findById(req.params.id).populate("category", "name slug");
+  if (!subCategory) throw createError("Not found", 404);
+  res.status(200).json({ success: true, data: subCategory });
+};
+
+// GET BY SLUG
+export const getSubCategoryBySlug = async (req: Request, res: Response, next: NextFunction) => {
+  const { slug, categoryId } = req.params;
+  const subCategory = await SubCategory.findOne({ slug, category: categoryId }).populate("category", "name slug");
+  if (!subCategory) throw createError("Not found", 404);
+  res.status(200).json({ success: true, data: subCategory });
+};
+
+// TOGGLE STATUS
 export const toggleSubCategoryStatus = async (req: Request, res: Response, next: NextFunction) => {
-  const { id } = req.params;
-
-  const subCategory = await SubCategory.findById(id);
-  if (!subCategory) return next(createError("Subcategory not found", 404));
-
+  const subCategory = await SubCategory.findById(req.params.id);
+  if (!subCategory) throw createError("Not found", 404);
   subCategory.isActive = !subCategory.isActive;
   await subCategory.save();
-
-  res.status(200).json({
-    success: true,
-    message: `Subcategory ${subCategory.isActive ? "activated" : "deactivated"} successfully`,
-    data: subCategory,
-  });
-};
-
-export const deleteSubCategory = async (req: Request, res: Response, next: NextFunction) => {
-  const { id } = req.params;
-
-  const subCategory = await SubCategory.findById(id);
-  if (!subCategory) return next(createError("Subcategory not found", 404));
-
-  await SubCategory.findByIdAndDelete(id);
-
-  res.status(200).json({
-    success: true,
-    message: "Subcategory deleted successfully",
-  });
+  res.status(200).json({ success: true, data: subCategory });
 };
