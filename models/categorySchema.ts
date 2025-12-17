@@ -1,5 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import slugify from "slugify";
+
 const categorySchema = new Schema(
   {
     name: {
@@ -21,6 +22,13 @@ const categorySchema = new Schema(
       maxlength: [500, "Description cannot exceed 500 characters"],
       default: null,
     },
+    // MANUAL ARRAY REFERENCE (Required for the $push/$pull logic in your controller)
+    subCategories: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "SubCategory",
+      },
+    ],
     isActive: {
       type: Boolean,
       default: true,
@@ -29,15 +37,10 @@ const categorySchema = new Schema(
   },
   {
     timestamps: true,
-    toJSON: {
-      transform: function (doc, ret: any) {
-        delete ret.__v;
-        return ret;
-      },
-    },
   }
 );
 
+// Auto-generate slug before saving
 categorySchema.pre("save", function (next) {
   if (this.isModified("name")) {
     this.slug = slugify(this.name, { lower: true, strict: true });

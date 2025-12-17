@@ -3,111 +3,75 @@ import { createError } from "../utils/createError";
 import Category from "../models/categorySchema";
 import SubCategory from "../models/subCategorySchema";
 
-// ==================== CATEGORY CONTROLLERS ====================
-
 export const createCategory = async (req: Request, res: Response, next: NextFunction) => {
   const { name, description } = req.body;
+  if (!name) throw createError("Category name is required", 400);
 
-  if (!name) return next(createError("Category name is required", 400));
+  const existing = await Category.findOne({ name });
+  if (existing) throw createError("Category already exists", 400);
 
   const category = new Category({
     name,
     description: description || null,
+    subCategories: [],
   });
-  await category.save();
 
-  res.status(201).json({
-    success: true,
-    message: "Category created successfully",
-    data: category,
-  });
+  await category.save();
+  res.status(201).json({ success: true, message: "Category created", data: category });
 };
 
 export const getAllCategories = async (req: Request, res: Response, next: NextFunction) => {
-  const categories = await Category.find({ isActive: true }).sort({ createdAt: -1 });
+  const categories = await Category.find({ isActive: true })
+    .populate("subCategories", "name slug isActive")
+    .sort({ createdAt: -1 });
 
-  res.status(200).json({
-    success: true,
-    count: categories.length,
-    data: categories,
-  });
+  res.status(200).json({ success: true, count: categories.length, data: categories });
 };
 
 export const getCategoryById = async (req: Request, res: Response, next: NextFunction) => {
-  const { id } = req.params;
-
-  const category = await Category.findById(id);
-  if (!category) return next(createError("Category not found", 404));
-
-  res.status(200).json({
-    success: true,
-    data: category,
-  });
+  const category = await Category.findById(req.params.id).populate("subCategories");
+  if (!category) throw createError("Category not found", 404);
+  res.status(200).json({ success: true, data: category });
 };
 
 export const getCategoryBySlug = async (req: Request, res: Response, next: NextFunction) => {
-  const { slug } = req.params;
-
-  const category = await Category.findOne({ slug });
-  if (!category) return next(createError("Category not found", 404));
-
-  res.status(200).json({
-    success: true,
-    data: category,
-  });
+  const category = await Category.findOne({ slug: req.params.slug }).populate("subCategories");
+  if (!category) throw createError("Category not found", 404);
+  res.status(200).json({ success: true, data: category });
 };
 
 export const updateCategory = async (req: Request, res: Response, next: NextFunction) => {
-  const { id } = req.params;
   const { name, description, isActive } = req.body;
-
-  const category = await Category.findById(id);
-  if (!category) return next(createError("Category not found", 404));
+  const category = await Category.findById(req.params.id);
+  if (!category) throw createError("Category not found", 404);
 
   if (name) category.name = name;
   if (description) category.description = description;
-  if (isActive) category.isActive = isActive;
+  if (isActive !== undefined) category.isActive = isActive;
 
   await category.save();
-
-  res.status(200).json({
-    success: true,
-    message: "Category updated successfully",
-    data: category,
-  });
+  res.status(200).json({ success: true, message: "Updated successfully", data: category });
 };
 
 export const toggleCategoryStatus = async (req: Request, res: Response, next: NextFunction) => {
-  const { id } = req.params;
-
-  const category = await Category.findById(id);
-  if (!category) return next(createError("Category not found", 404));
+  const category = await Category.findById(req.params.id);
+  if (!category) throw createError("Category not found", 404);
 
   category.isActive = !category.isActive;
   await category.save();
-
-  res.status(200).json({
-    success: true,
-    message: `Category ${category.isActive ? "activated" : "deactivated"} successfully`,
-    data: category,
-  });
+  res.status(200).json({ success: true, data: category });
 };
 
 export const deleteCategory = async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params;
-
   const category = await Category.findById(id);
-  if (!category) return next(createError("Category not found", 404));
+  if (!category) throw createError("Category not found", 404);
 
-  const subCategoriesCount = await SubCategory.countDocuments({ category: id });
-  if (subCategoriesCount > 0) {
-    return next(createError("Cannot delete category with existing subcategories", 400));
+  const subCount = await SubCategory.countDocuments({ category: id });
+  if (subCount > 0) {
+    throw createError("Cannot delete category with existing subcategories.", 400);
   }
 
   await Category.findByIdAndDelete(id);
-
-  res.status(200).json({
-    success: true,
-    message: "Category deleted successfully",
-  });
+  res.status(200).json({ success: true, message: "Deleted successfully" });
 };
