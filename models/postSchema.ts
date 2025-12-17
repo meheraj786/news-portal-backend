@@ -60,7 +60,6 @@ const postSchema = new Schema<IPost>(
         ref: "Tag",
       },
     ],
-
     views: {
       type: Number,
       default: 0,
@@ -76,7 +75,6 @@ const postSchema = new Schema<IPost>(
       default: true,
       index: true,
     },
-
   },
   {
     timestamps: true,
