@@ -23,17 +23,42 @@ const getFile = (req: CustomRequest): Express.Multer.File | undefined => {
   return undefined;
 };
 
-// Helper: Process tags
+// Helper: Process tags (FIXED to handle JSON Strings)
 const processTags = async (tags: string | string[]): Promise<Types.ObjectId[]> => {
   if (!tags) return [];
-  const tagList = Array.isArray(tags) ? tags : [tags];
+
+  let tagList: string[] = [];
+
+  // Case 1: Input is already an array (e.g. ["news", "tech"])
+  if (Array.isArray(tags)) {
+    tagList = tags;
+  }
+  // Case 2: Input is a string (e.g. "['news','tech']" OR "news, tech")
+  else if (typeof tags === "string") {
+    try {
+      // Try to parse it as JSON (This fixes your issue)
+      const parsed = JSON.parse(tags);
+      if (Array.isArray(parsed)) {
+        tagList = parsed;
+      } else {
+        tagList = [tags];
+      }
+    } catch (error) {
+      // If JSON parse fails, assume it is comma-separated (e.g. "news, politics")
+      tagList = tags.split(",");
+    }
+  }
+
+  // Clean up: Trim whitespace and remove empty strings
+  tagList = tagList.map((t) => t.trim()).filter((t) => t.length > 0);
+
   if (tagList.length === 0) return [];
 
   const tagIds = await Promise.all(
     tagList.map(async (tagName) => {
       const tag = await Tag.findOneAndUpdate(
-        { name: tagName.trim().toLowerCase() },
-        { name: tagName.trim().toLowerCase() },
+        { name: tagName.toLowerCase() }, // Removed .trim() here as we did it above
+        { name: tagName.toLowerCase() },
         { upsert: true, new: true }
       );
       if (!tag) throw createError("Error processing tags", 500);
@@ -86,7 +111,7 @@ export const createPost = asyncHandler(async (req: CustomRequest, res: Response)
 
     res.status(201).json({ success: true, message: "Post created successfully", data: post });
   } catch (error) {
-    // SAFETY: If DB fails, delete the image we just uploaded so we don't have orphan files
+    // SAFETY: If DB fails, delete the image we just uploaded
     await deleteFromCloudinary(imageData.publicId);
     throw error;
   }
