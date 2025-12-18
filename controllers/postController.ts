@@ -1,10 +1,12 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
 import { Types } from "mongoose";
 import fs from "fs";
 import { Post } from "../models/postSchema";
 import { Tag } from "../models/tagSchema";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinary";
 import { createError } from "../utils/createError";
+import Category from "../models/categorySchema";
+import { asyncHandler } from "../utils/asyncHandler";
 
 // Interface for Request with Files
 interface CustomRequest extends Request {
@@ -42,7 +44,7 @@ const processTags = async (tags: string | string[]): Promise<Types.ObjectId[]> =
 };
 
 // 1. Create Post
-export const createPost = async (req: CustomRequest, res: Response, next: NextFunction) => {
+export const createPost = asyncHandler(async (req: CustomRequest, res: Response) => {
   const { title, content, category, subCategory, tags, isDraft, isFavourite } = req.body;
   const file = getFile(req);
 
@@ -58,7 +60,7 @@ export const createPost = async (req: CustomRequest, res: Response, next: NextFu
   const imageData = await uploadToCloudinary(file.path, "news-posts");
   if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
-  // 2. Process Tags & Save (Wrapped in try-catch ONLY for cleanup safety)
+  // 2. Process Tags & Save
   try {
     let tagIds: Types.ObjectId[] = [];
     if (tags) {
@@ -84,14 +86,14 @@ export const createPost = async (req: CustomRequest, res: Response, next: NextFu
 
     res.status(201).json({ success: true, message: "Post created successfully", data: post });
   } catch (error) {
-    // CLEANUP: If DB fails, delete the image we just uploaded
+    // SAFETY: If DB fails, delete the image we just uploaded so we don't have orphan files
     await deleteFromCloudinary(imageData.publicId);
-    throw error; // Pass to global error handler
+    throw error;
   }
-};
+});
 
 // 2. Update Post
-export const updatePost = async (req: CustomRequest, res: Response, next: NextFunction) => {
+export const updatePost = asyncHandler(async (req: CustomRequest, res: Response) => {
   const { postId } = req.params;
   const { title, content, category, subCategory, tags, isDraft } = req.body;
   const file = getFile(req);
@@ -101,10 +103,11 @@ export const updatePost = async (req: CustomRequest, res: Response, next: NextFu
 
   let imageData = oldPost.image;
 
-  // We use a mini try-catch here just for image replacement logic safety
   try {
     if (file) {
+      // Delete old image
       if (oldPost.image?.publicId) await deleteFromCloudinary(oldPost.image.publicId);
+      // Upload new image
       imageData = await uploadToCloudinary(file.path, "news-posts");
       if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
     }
@@ -140,37 +143,39 @@ export const updatePost = async (req: CustomRequest, res: Response, next: NextFu
     if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
     throw error;
   }
-};
+});
 
 // 3. Delete Post
-export const deletePost = async (req: Request, res: Response, next: NextFunction) => {
+export const deletePost = asyncHandler(async (req: Request, res: Response) => {
   const { postId } = req.params;
   const post = await Post.findById(postId);
 
   if (!post) throw createError("Post not found", 404);
 
-  if (post.image?.publicId) await deleteFromCloudinary(post.image.publicId);
+  // Always delete image from Cloudinary
+  if (post.image?.publicId) {
+    await deleteFromCloudinary(post.image.publicId);
+  }
 
   await Post.findByIdAndDelete(postId);
   await Tag.updateMany({ _id: { $in: post.tags } }, { $pull: { posts: postId } });
 
   res.status(200).json({ success: true, message: "Post deleted successfully" });
-};
+});
 
 // 4. Get Post By ID
-export const getPostById = async (req: Request, res: Response, next: NextFunction) => {
+export const getPostById = asyncHandler(async (req: Request, res: Response) => {
   const post = await Post.findByIdAndUpdate(req.params.postId, { $inc: { views: 1 } }, { new: true }).populate([
     "category",
     "subCategory",
     "tags",
   ]);
-
   if (!post) throw createError("Post not found", 404);
   res.status(200).json({ success: true, data: post });
-};
+});
 
 // 5. Get All
-export const getAllPosts = async (req: Request, res: Response, next: NextFunction) => {
+export const getAllPosts = asyncHandler(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
   const skip = (page - 1) * limit;
@@ -186,10 +191,51 @@ export const getAllPosts = async (req: Request, res: Response, next: NextFunctio
     .populate(["category", "subCategory", "tags"]);
 
   const total = await Post.countDocuments(filter);
-
   res.status(200).json({
     success: true,
     data: posts,
     pagination: { total, page, limit, pages: Math.ceil(total / limit) },
   });
-};
+});
+
+// 6. Search Posts
+export const searchPosts = asyncHandler(async (req: Request, res: Response) => {
+  const { query, categoryName } = req.query;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const skip = (page - 1) * limit;
+
+  const searchFilter: any = { isDraft: false };
+
+  if (query) {
+    searchFilter.title = { $regex: query, $options: "i" };
+  }
+
+  if (categoryName) {
+    const category = await Category.findOne({
+      name: { $regex: categoryName, $options: "i" },
+    });
+    if (category) {
+      searchFilter.category = category._id;
+    } else {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        pagination: { total: 0, page, limit, pages: 0 },
+      });
+    }
+  }
+
+  const posts = await Post.find(searchFilter)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .populate(["category", "subCategory", "tags"]);
+
+  const total = await Post.countDocuments(searchFilter);
+  res.status(200).json({
+    success: true,
+    data: posts,
+    pagination: { total, page, limit, pages: Math.ceil(total / limit) },
+  });
+});

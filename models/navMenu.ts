@@ -13,16 +13,11 @@ const navMenuSchema = new Schema<INavMenu>(
           ref: "Category",
         },
       ],
-      validate: [arrayLimit, "{PATH} exceeds the limit of 10"],
+      validate: [(val: Types.ObjectId[]) => val.length <= 10, "Nav menu limit is 10 items"],
       default: [],
     },
   },
   { timestamps: true }
 );
-
-// Validation to ensure design stays consistent
-function arrayLimit(val: Types.ObjectId[]) {
-  return val.length <= 10;
-}
 
 export const NavMenu = model<INavMenu>("NavMenu", navMenuSchema);

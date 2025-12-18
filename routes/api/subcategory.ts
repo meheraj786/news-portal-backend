@@ -14,15 +14,15 @@ import { asyncHandler } from "../../utils/asyncHandler";
 const subCategoryRoutes = express.Router();
 
 // Public routes
-subCategoryRoutes.get("/", asyncHandler(getAllSubCategories));
-subCategoryRoutes.get("/:id", asyncHandler(getSubCategoryById));
+subCategoryRoutes.get("/", getAllSubCategories);
+subCategoryRoutes.get("/:id", getSubCategoryById);
 // Note: This matches the controller logic (slug + categoryId)
-subCategoryRoutes.get("/slug/:categoryId/:slug", asyncHandler(getSubCategoryBySlug));
+subCategoryRoutes.get("/slug/:categoryId/:slug", getSubCategoryBySlug);
 
 // Protected routes (admin only)
-subCategoryRoutes.post("/", verifyAuthToken, asyncHandler(createSubCategory));
-subCategoryRoutes.put("/:id", verifyAuthToken, asyncHandler(updateSubCategory));
-subCategoryRoutes.patch("/:id/toggle", verifyAuthToken, asyncHandler(toggleSubCategoryStatus));
-subCategoryRoutes.delete("/:id", verifyAuthToken, asyncHandler(deleteSubCategory));
+subCategoryRoutes.post("/", verifyAuthToken, createSubCategory);
+subCategoryRoutes.put("/:id", verifyAuthToken, updateSubCategory);
+subCategoryRoutes.patch("/:id/toggle", verifyAuthToken, toggleSubCategoryStatus);
+subCategoryRoutes.delete("/:id", verifyAuthToken, deleteSubCategory);
 
 export default subCategoryRoutes;

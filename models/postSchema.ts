@@ -10,7 +10,6 @@ export interface IPost extends Document {
   category: Types.ObjectId;
   subCategory?: Types.ObjectId;
   tags: Types.ObjectId[];
-  author: Types.ObjectId;
   views: number;
   isFavourite: boolean;
   isDraft: boolean;
@@ -46,13 +45,11 @@ const postSchema = new Schema<IPost>(
       required: [true, "Category is required"],
       index: true,
     },
-    subCategory: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "SubCategory",
-        index: true,
-      },
-    ],
+    subCategory: {
+      type: Schema.Types.ObjectId,
+      ref: "SubCategory",
+      index: true,
+    },
     tags: [
       {
         type: Schema.Types.ObjectId,
@@ -87,11 +84,6 @@ const postSchema = new Schema<IPost>(
 );
 
 postSchema.index({ category: 1, isDraft: 1 });
-postSchema.index({ subCategory: 1, isDraft: 1 });
 postSchema.index({ createdAt: -1 });
-postSchema.index({ views: -1 });
-postSchema.index({ isFavourite: 1, isDraft: 1 });
-postSchema.index({ author: 1, isDraft: 1 });
-postSchema.index({ tags: 1 });
 
 export const Post = mongoose.model<IPost>("Post", postSchema);

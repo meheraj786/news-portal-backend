@@ -1,19 +1,35 @@
 import express from "express";
-import { createPost, deletePost, getAllPosts, getPostById, updatePost } from "../../controllers/postController";
+import {
+  createPost,
+  deletePost,
+  getAllPosts,
+  getPostById,
+  searchPosts,
+  updatePost,
+} from "../../controllers/postController";
 import { upload } from "../../middleware/uploadMiddleware";
-import { asyncHandler } from "../../utils/asyncHandler";
+import { verifyAuthToken } from "../../middleware/authMddleware";
 
 const postRoutes = express.Router();
 
-// Public
-postRoutes.get("/", asyncHandler(getAllPosts));
-postRoutes.get("/:postId", asyncHandler(getPostById));
+// ================= PUBLIC ROUTES =================
 
-// Protected / Admin
-// We use upload.any() so you don't get "Field name missing" errors.
-// You can use any key name for the file in Postman.
-postRoutes.post("/", upload.any(), asyncHandler(createPost));
-postRoutes.put("/:postId", upload.any(), asyncHandler(updatePost));
-postRoutes.delete("/:postId", asyncHandler(deletePost));
+// 1. Get All
+postRoutes.get("/", getAllPosts);
+
+// 2. Search (MUST be before /:postId)
+postRoutes.get("/search", searchPosts);
+
+// 3. Get Single (Dynamic ID)
+postRoutes.get("/:postId", getPostById);
+
+// ================= PROTECTED ROUTES =================
+
+// Order: Auth Check -> File Handling -> Controller
+postRoutes.post("/", verifyAuthToken, upload.any(), createPost);
+
+postRoutes.put("/:postId", verifyAuthToken, upload.any(), updatePost);
+
+postRoutes.delete("/:postId", verifyAuthToken, deletePost);
 
 export default postRoutes;

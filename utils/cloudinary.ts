@@ -7,7 +7,6 @@ export const uploadToCloudinary = async (
   folder: string = "general"
 ): Promise<{ url: string; publicId: string }> => {
   try {
-    // FIX: Changed COUDINARY to CLOUDINARY to match your .env and config file
     if (!process.env.CLOUDINARY_CLOUD_NAME) {
       console.error("❌ Cloudinary Config Missing! Check your .env file.");
       throw createError("Cloudinary configuration missing", 500);
@@ -24,7 +23,6 @@ export const uploadToCloudinary = async (
     };
   } catch (error: any) {
     console.error("Cloudinary Upload Error:", error.message || error);
-    // Use your custom error to ensure it hits the global handler correctly
     throw createError("Image upload failed", 500);
   }
 };
@@ -37,7 +35,5 @@ export const deleteFromCloudinary = async (publicId: string): Promise<void> => {
     }
   } catch (error) {
     console.error("Error deleting image from Cloudinary:", error);
-    // We usually don't throw here to prevent crashing the whole request
-    // just because a cleanup deletion failed.
   }
 };

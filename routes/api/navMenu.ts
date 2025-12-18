@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { getNavMenu, updateNavMenu } from "../../controllers/navMenuController";
+import { verifyAuthToken } from "../../middleware/authMddleware";
 
-const navMenuRoutes = Router();
+const router = Router();
 
-navMenuRoutes.get("/", getNavMenu);
-navMenuRoutes.put("/", updateNavMenu);
+router.route("/").get(getNavMenu).put(verifyAuthToken, updateNavMenu);
 
-export default navMenuRoutes;
+export default router;
