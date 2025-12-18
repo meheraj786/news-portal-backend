@@ -14,8 +14,6 @@ export interface IPost extends Document {
   views: number;
   isFavourite: boolean;
   isDraft: boolean;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 const postSchema = new Schema<IPost>(
@@ -48,12 +46,13 @@ const postSchema = new Schema<IPost>(
       required: [true, "Category is required"],
       index: true,
     },
-    subCategory: {
-      type: Schema.Types.ObjectId,
-      ref: "SubCategory",
-      required: [true, "SubCategory is required"],
-      index: true,
-    },
+    subCategory: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "SubCategory",
+        index: true,
+      },
+    ],
     tags: [
       {
         type: Schema.Types.ObjectId,

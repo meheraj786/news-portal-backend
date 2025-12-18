@@ -46,8 +46,8 @@ export const createPost = async (req: CustomRequest, res: Response, next: NextFu
   const { title, content, category, subCategory, tags, isDraft, isFavourite } = req.body;
   const file = getFile(req);
 
-  if (!title || !content || !category || !subCategory) {
-    throw createError("Title, content, category and subCategory are required", 400);
+  if (!title || !content || !category) {
+    throw createError("Title, content and category are required", 400);
   }
 
   if (!file) {
@@ -70,7 +70,7 @@ export const createPost = async (req: CustomRequest, res: Response, next: NextFu
       content,
       image: imageData,
       category,
-      subCategory,
+      subCategory: subCategory !== undefined ? subCategory : null,
       tags: tagIds,
       isDraft: isDraft === "true" || isDraft === true,
       isFavourite: isFavourite === "true" || isFavourite === true,
