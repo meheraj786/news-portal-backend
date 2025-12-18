@@ -11,6 +11,6 @@ router.use("/admin", authRoutes);
 router.use("/category", categoryRoutes);
 router.use("/sub-category", subCategoryRoutes);
 router.use("/post", postRoutes);
-router.use("/navMenu", navMenuRoutes);
+router.use("/nav-menu", navMenuRoutes);
 
 export default router;

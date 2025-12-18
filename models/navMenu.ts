@@ -10,7 +10,7 @@ const navMenuSchema = new Schema<INavMenu>(
       type: [
         {
           type: Schema.Types.ObjectId,
-          ref: "Category", // Ensure this matches your Category model name
+          ref: "Category",
         },
       ],
       validate: [arrayLimit, "{PATH} exceeds the limit of 10"],

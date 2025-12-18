@@ -6,12 +6,15 @@ import { dbConnect } from "./configs/db.config";
 import { errorHandler } from "./middleware/errorHandler";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import { seedNavMenu } from "./utils/navMenuSeed";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 (async () => {
   try {
+    await dbConnect();
+    await seedNavMenu();
     app.use(
       cors({
         origin: "http://localhost:5173",
@@ -25,8 +28,6 @@ const PORT = process.env.PORT || 5000;
     app.use(routers);
 
     app.use(errorHandler);
-
-    await dbConnect();
 
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   } catch (error) {
