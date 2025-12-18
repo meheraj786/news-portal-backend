@@ -60,7 +60,7 @@ export const createPost = asyncHandler(async (req: CustomRequest, res: Response)
   const imageData = await uploadToCloudinary(file.path, "news-posts");
   if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
-  // 2. Process Tags & Save (Wrapped in try-catch ONLY for cleanup safety)
+  // 2. Process Tags & Save
   try {
     let tagIds: Types.ObjectId[] = [];
     if (tags) {
@@ -86,9 +86,9 @@ export const createPost = asyncHandler(async (req: CustomRequest, res: Response)
 
     res.status(201).json({ success: true, message: "Post created successfully", data: post });
   } catch (error) {
-    // CLEANUP: If DB fails, delete the image we just uploaded
+    // SAFETY: If DB fails, delete the image we just uploaded so we don't have orphan files
     await deleteFromCloudinary(imageData.publicId);
-    throw error; // Pass to global error handler
+    throw error;
   }
 });
 
@@ -103,10 +103,11 @@ export const updatePost = asyncHandler(async (req: CustomRequest, res: Response)
 
   let imageData = oldPost.image;
 
-  // We use a mini try-catch here just for image replacement logic safety
   try {
     if (file) {
+      // Delete old image
       if (oldPost.image?.publicId) await deleteFromCloudinary(oldPost.image.publicId);
+      // Upload new image
       imageData = await uploadToCloudinary(file.path, "news-posts");
       if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
     }
@@ -151,7 +152,10 @@ export const deletePost = asyncHandler(async (req: Request, res: Response) => {
 
   if (!post) throw createError("Post not found", 404);
 
-  if (post.image?.publicId) await deleteFromCloudinary(post.image.publicId);
+  // Always delete image from Cloudinary
+  if (post.image?.publicId) {
+    await deleteFromCloudinary(post.image.publicId);
+  }
 
   await Post.findByIdAndDelete(postId);
   await Tag.updateMany({ _id: { $in: post.tags } }, { $pull: { posts: postId } });
@@ -166,7 +170,6 @@ export const getPostById = asyncHandler(async (req: Request, res: Response) => {
     "subCategory",
     "tags",
   ]);
-
   if (!post) throw createError("Post not found", 404);
   res.status(200).json({ success: true, data: post });
 });
@@ -188,7 +191,6 @@ export const getAllPosts = asyncHandler(async (req: Request, res: Response) => {
     .populate(["category", "subCategory", "tags"]);
 
   const total = await Post.countDocuments(filter);
-
   res.status(200).json({
     success: true,
     data: posts,
@@ -196,31 +198,26 @@ export const getAllPosts = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-// 6. search post
+// 6. Search Posts
 export const searchPosts = asyncHandler(async (req: Request, res: Response) => {
-  const { query, categoryName } = req.query; // 'query' matches title
+  const { query, categoryName } = req.query;
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
   const skip = (page - 1) * limit;
 
   const searchFilter: any = { isDraft: false };
 
-  // 1. Search by Post Title (Regex)
   if (query) {
     searchFilter.title = { $regex: query, $options: "i" };
   }
 
-  // 2. Search by Category Name
   if (categoryName) {
-    // First, find the category ID from the name
     const category = await Category.findOne({
       name: { $regex: categoryName, $options: "i" },
     });
-
     if (category) {
       searchFilter.category = category._id;
     } else {
-      // If category name doesn't exist, return empty immediately
       return res.status(200).json({
         success: true,
         data: [],
@@ -236,7 +233,6 @@ export const searchPosts = asyncHandler(async (req: Request, res: Response) => {
     .populate(["category", "subCategory", "tags"]);
 
   const total = await Post.countDocuments(searchFilter);
-
   res.status(200).json({
     success: true,
     data: posts,
