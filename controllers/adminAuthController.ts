@@ -1,30 +1,41 @@
-import { NextFunction, Request, Response } from "express";
+import { Request, Response } from "express"; // Removed NextFunction
 import Admin from "../models/adminSchema";
 import { createError } from "../utils/createError";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { sendEmail } from "../utils/sendEmail";
+import { asyncHandler } from "../utils/asyncHandler";
 
-export const login = async (req: Request, res: Response, next: NextFunction) => {
+// 1. LOGIN
+export const login = asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
-  if (!email || !password) return next(createError("Email and Password are required.", 400));
+
+  if (!email || !password) {
+    throw createError("Email and Password are required.", 400);
+  }
 
   const admin = await Admin.findOne({ email }).select("+password");
-  if (!admin) return next(createError("Invalid email or password.", 401));
+  if (!admin) {
+    throw createError("Invalid email or password.", 401);
+  }
 
   const isMatch = await admin.compareField("password", password);
-  if (!isMatch) return next(createError("Invalid email or password", 401));
-
-  //generate jwt
-  const payload = { id: admin._id, email: admin.email, username: admin.username };
-  if (!process.env.JWT_SECRET) {
-    return next(createError("JWT_SECRET environment variable is not defined", 500));
+  if (!isMatch) {
+    throw createError("Invalid email or password", 401);
   }
+
+  // Generate JWT
+  const payload = { id: admin._id, email: admin.email, username: admin.username };
+
+  if (!process.env.JWT_SECRET) {
+    throw createError("JWT_SECRET environment variable is not defined", 500);
+  }
+
   const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: "365d",
   });
 
-  //set cookie
+  // Set Cookie
   res.cookie("accessToken", accessToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -37,87 +48,89 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     message: "Login successful",
     data: admin,
   });
-};
+});
 
-export const requestVerification = async (req: Request, res: Response, next: NextFunction) => {
+// 2. REQUEST OTP
+export const requestVerification = asyncHandler(async (req: Request, res: Response) => {
   const { email } = req.body;
-  //assuming client side did the rejex part
-  if (!email) return next(createError("Email is required.", 400));
+  if (!email) throw createError("Email is required.", 400);
 
   const admin = await Admin.findOne({ email }).select(
     "+otp +otpExpiry +otpAttempts +lastOtpRequest +lockedUntil +resetSessionActive +resetSessionExpiry +otpVerified"
   );
-  if (!admin) return next(createError("Admin not found.", 404));
+
+  if (!admin) throw createError("Admin not found.", 404);
+
+  // Check Lock
   if (admin.lockedUntil && admin.lockedUntil > new Date()) {
     const remainingTime = Math.ceil((admin.lockedUntil.getTime() - Date.now()) / 60000);
-    return next(createError(`Account is locked. Try again after ${remainingTime} minutes.`, 403));
+    throw createError(`Account is locked. Try again after ${remainingTime} minutes.`, 403);
   }
 
-  //check for verify
+  // Check if already verified & session active (Prevent spamming if already ready to reset)
   if (admin.otpVerified && admin.resetSessionActive) {
-    return next(
-      createError(
-        "You are already verified and your reset session is still valid. Please go to the resetPassword page.",
-        400
-      )
+    throw createError(
+      "You are already verified and your reset session is still valid. Please go to the resetPassword page.",
+      400
     );
   }
 
-  // 1min cooldown
+  // 1 Minute Cooldown check
   if (admin.lastOtpRequest) {
-    const timeSinceLastRequest = (Date.now() - admin.lastOtpRequest.getTime()) / 1000; // in sec
-    // 429 - too  many requests
+    const timeSinceLastRequest = (Date.now() - admin.lastOtpRequest.getTime()) / 1000;
     if (timeSinceLastRequest < 60) {
-      return next(
-        createError(
-          `Please wait ${60 - Math.floor(timeSinceLastRequest)} second${
-            timeSinceLastRequest > 1 ? "s" : ""
-          } before requesting a new OTP.`,
-          429
-        )
+      throw createError(
+        `Please wait ${60 - Math.floor(timeSinceLastRequest)} second${
+          timeSinceLastRequest > 1 ? "s" : ""
+        } before requesting a new OTP.`,
+        429
       );
     }
   }
 
-  // generate 6 digit OTP - string
+  // Generate OTP
   const otp = crypto.randomInt(100000, 999999).toString();
 
-  // update in db
+  // Update DB
   admin.otp = otp;
-  admin.otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5min
+  admin.otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 min
   admin.lastOtpRequest = new Date();
   admin.otpAttempts = 0;
   admin.lockedUntil = null;
   admin.resetSessionActive = true;
-  admin.resetSessionExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15min
+  admin.resetSessionExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 min
   admin.otpVerified = false;
+
   await admin.save();
 
-  // send email
+  // Send Email
   await sendEmail(email, "verification", otp);
 
   res.status(200).json({
     success: true,
     message: "OTP sent to your email",
   });
-};
+});
 
-export const verifyOTP = async (req: Request, res: Response, next: NextFunction) => {
+// 3. VERIFY OTP
+export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
   const { email, otp } = req.body;
-  //assuming client side did the rejex part
-  if (!email || !otp) return next(createError("Email and OTP are required.", 400));
+  if (!email || !otp) throw createError("Email and OTP are required.", 400);
 
   const admin = await Admin.findOne({ email }).select(
     "+otp +otpExpiry +otpAttempts +lastOtpRequest +lockedUntil +resetSessionActive +resetSessionExpiry +otpVerified"
   );
-  if (!admin) return next(createError("Admin not found.", 404));
 
-  if (admin.otpVerified) return next(createError("You are already verified", 400));
+  if (!admin) throw createError("Admin not found.", 404);
 
-  // check reset password seassion
+  if (admin.otpVerified) throw createError("You are already verified", 400);
+
+  // Check Reset Session existence
   if (!admin.resetSessionActive) {
-    return next(createError("No active reset password session. Please request OTP first", 400));
+    throw createError("No active reset password session. Please request OTP first", 400);
   }
+
+  // Check Reset Session Expiry
   if (!admin.resetSessionExpiry || admin.resetSessionExpiry < new Date()) {
     admin.resetSessionActive = false;
     admin.otp = null;
@@ -125,27 +138,29 @@ export const verifyOTP = async (req: Request, res: Response, next: NextFunction)
     admin.otpVerified = false;
     await admin.save();
 
-    return next(createError("Reset session expired. Please request a new OTP", 400));
+    throw createError("Reset session expired. Please request a new OTP", 400);
   }
 
+  // Check Lock
   if (admin.lockedUntil && admin.lockedUntil > new Date()) {
-    return next(createError(`Account is locked. Please try again later.`, 403));
+    throw createError(`Account is locked. Please try again later.`, 403);
   }
 
-  // otp expiry
+  // Check OTP Expiry
   if (!admin.otpExpiry || admin.otpExpiry < new Date()) {
-    return next(createError("OTP has expired. Please request a new one.", 400));
+    throw createError("OTP has expired. Please request a new one.", 400);
   }
 
-  // check otp match
+  // Check OTP Match
   const isMatch = await admin.compareField("otp", otp);
-  // on wrong attempt
+
+  // Handle Wrong OTP
   if (!isMatch) {
     admin.otpAttempts = (admin.otpAttempts || 0) + 1;
 
-    // lock after 3 failed attempt
+    // Lock after 3 failed attempts
     if (admin.otpAttempts >= 3) {
-      admin.lockedUntil = new Date(Date.now() + 30 * 60 * 1000); // 30min
+      admin.lockedUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 min lock
       admin.otpAttempts = 0;
       admin.otp = null;
       admin.otpExpiry = null;
@@ -153,14 +168,14 @@ export const verifyOTP = async (req: Request, res: Response, next: NextFunction)
       admin.otpVerified = false;
       await admin.save();
 
-      return next(createError("Too many failed attempts. Account locked for 30 minutes", 429));
+      throw createError("Too many failed attempts. Account locked for 30 minutes", 429);
     }
-    await admin.save();
 
-    return next(createError(`Wrong OTP. ${3 - admin.otpAttempts} attempts remaining`, 400));
+    await admin.save();
+    throw createError(`Wrong OTP. ${3 - admin.otpAttempts} attempts remaining`, 400);
   }
 
-  // on success
+  // Handle Success
   admin.otp = null;
   admin.lockedUntil = null;
   admin.otpExpiry = null;
@@ -172,48 +187,52 @@ export const verifyOTP = async (req: Request, res: Response, next: NextFunction)
     success: true,
     message: "OTP verified successfully. You can now reset your password",
   });
-};
+});
 
-export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
+// 4. RESET PASSWORD
+export const resetPassword = asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
-  if (!email || !password) return next(createError("Email and password are required", 400));
-  if (password.length < 8) return next(createError("Password must be at least 8 characters", 400));
+
+  if (!email || !password) throw createError("Email and password are required", 400);
+  if (password.length < 8) throw createError("Password must be at least 8 characters", 400);
 
   const admin = await Admin.findOne({ email }).select("+password +resetSessionActive +resetSessionExpiry +otpVerified");
-  if (!admin) return next(createError("Admin not found.", 404));
+  if (!admin) throw createError("Admin not found.", 404);
 
-  // verify check
-  if (!admin.otpVerified) return next(createError("Please verify your email first.", 403));
+  // Verification Check
+  if (!admin.otpVerified) throw createError("Please verify your email first.", 403);
 
-  // check for valid reset seassion
+  // Session Check
   if (!admin.resetSessionActive) {
-    return next(createError("No active password reset session. Please verify OTP first", 400));
+    throw createError("No active password reset session. Please verify OTP first", 400);
   }
+
   if (!admin.resetSessionExpiry || admin.resetSessionExpiry < new Date()) {
     admin.resetSessionActive = false;
     await admin.save();
-    return next(createError("Reset session expired. Please start over with OTP verification.", 400));
+    throw createError("Reset session expired. Please start over with OTP verification.", 400);
   }
 
-  // update password and clear the reset seassion
-  admin.password = password;
+  // Update Password
+  admin.password = password; // Assuming your Model has a "pre-save" hook to Hash this!
   admin.resetSessionActive = false;
   admin.resetSessionExpiry = null;
-  admin.otpVerified = false;
+  admin.otpVerified = false; // Reset verification status
+
   await admin.save();
 
   res.status(200).json({
     success: true,
     message: "Password reset successful. You can now login with your new password.",
   });
-};
+});
 
+// 5. LOGOUT
 export const logout = (req: Request, res: Response) => {
-  // Clear the access token cookie by setting it with an expired date
   res.clearCookie("accessToken", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict", // CSRF protection
+    sameSite: "strict",
     path: "/",
   });
 

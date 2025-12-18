@@ -1,10 +1,12 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
 import { Types } from "mongoose";
 import fs from "fs";
 import { Post } from "../models/postSchema";
 import { Tag } from "../models/tagSchema";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinary";
 import { createError } from "../utils/createError";
+import Category from "../models/categorySchema";
+import { asyncHandler } from "../utils/asyncHandler";
 
 // Interface for Request with Files
 interface CustomRequest extends Request {
@@ -42,7 +44,7 @@ const processTags = async (tags: string | string[]): Promise<Types.ObjectId[]> =
 };
 
 // 1. Create Post
-export const createPost = async (req: CustomRequest, res: Response, next: NextFunction) => {
+export const createPost = asyncHandler(async (req: CustomRequest, res: Response) => {
   const { title, content, category, subCategory, tags, isDraft, isFavourite } = req.body;
   const file = getFile(req);
 
@@ -88,10 +90,10 @@ export const createPost = async (req: CustomRequest, res: Response, next: NextFu
     await deleteFromCloudinary(imageData.publicId);
     throw error; // Pass to global error handler
   }
-};
+});
 
 // 2. Update Post
-export const updatePost = async (req: CustomRequest, res: Response, next: NextFunction) => {
+export const updatePost = asyncHandler(async (req: CustomRequest, res: Response) => {
   const { postId } = req.params;
   const { title, content, category, subCategory, tags, isDraft } = req.body;
   const file = getFile(req);
@@ -140,10 +142,10 @@ export const updatePost = async (req: CustomRequest, res: Response, next: NextFu
     if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
     throw error;
   }
-};
+});
 
 // 3. Delete Post
-export const deletePost = async (req: Request, res: Response, next: NextFunction) => {
+export const deletePost = asyncHandler(async (req: Request, res: Response) => {
   const { postId } = req.params;
   const post = await Post.findById(postId);
 
@@ -155,10 +157,10 @@ export const deletePost = async (req: Request, res: Response, next: NextFunction
   await Tag.updateMany({ _id: { $in: post.tags } }, { $pull: { posts: postId } });
 
   res.status(200).json({ success: true, message: "Post deleted successfully" });
-};
+});
 
 // 4. Get Post By ID
-export const getPostById = async (req: Request, res: Response, next: NextFunction) => {
+export const getPostById = asyncHandler(async (req: Request, res: Response) => {
   const post = await Post.findByIdAndUpdate(req.params.postId, { $inc: { views: 1 } }, { new: true }).populate([
     "category",
     "subCategory",
@@ -167,10 +169,10 @@ export const getPostById = async (req: Request, res: Response, next: NextFunctio
 
   if (!post) throw createError("Post not found", 404);
   res.status(200).json({ success: true, data: post });
-};
+});
 
 // 5. Get All
-export const getAllPosts = async (req: Request, res: Response, next: NextFunction) => {
+export const getAllPosts = asyncHandler(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
   const skip = (page - 1) * limit;
@@ -192,4 +194,52 @@ export const getAllPosts = async (req: Request, res: Response, next: NextFunctio
     data: posts,
     pagination: { total, page, limit, pages: Math.ceil(total / limit) },
   });
-};
+});
+
+// 6. search post
+export const searchPosts = asyncHandler(async (req: Request, res: Response) => {
+  const { query, categoryName } = req.query; // 'query' matches title
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const skip = (page - 1) * limit;
+
+  const searchFilter: any = { isDraft: false };
+
+  // 1. Search by Post Title (Regex)
+  if (query) {
+    searchFilter.title = { $regex: query, $options: "i" };
+  }
+
+  // 2. Search by Category Name
+  if (categoryName) {
+    // First, find the category ID from the name
+    const category = await Category.findOne({
+      name: { $regex: categoryName, $options: "i" },
+    });
+
+    if (category) {
+      searchFilter.category = category._id;
+    } else {
+      // If category name doesn't exist, return empty immediately
+      return res.status(200).json({
+        success: true,
+        data: [],
+        pagination: { total: 0, page, limit, pages: 0 },
+      });
+    }
+  }
+
+  const posts = await Post.find(searchFilter)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .populate(["category", "subCategory", "tags"]);
+
+  const total = await Post.countDocuments(searchFilter);
+
+  res.status(200).json({
+    success: true,
+    data: posts,
+    pagination: { total, page, limit, pages: Math.ceil(total / limit) },
+  });
+});

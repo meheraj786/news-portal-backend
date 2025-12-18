@@ -9,21 +9,20 @@ import {
   updateCategory,
 } from "../../controllers/categoryController";
 import { verifyAuthToken } from "../../middleware/authMddleware";
-import { asyncHandler } from "../../utils/asyncHandler";
 
 const categoryRoutes = express.Router();
 
 // Public routes
-categoryRoutes.get("/", asyncHandler(getAllCategories));
+categoryRoutes.get("/", getAllCategories);
 
 // IMPORTANT: Moved Slug route to "/slug/:slug" to avoid conflict with "/:id"
-categoryRoutes.get("/slug/:slug", asyncHandler(getCategoryBySlug));
-categoryRoutes.get("/:id", asyncHandler(getCategoryById));
+categoryRoutes.get("/slug/:slug", getCategoryBySlug);
+categoryRoutes.get("/:id", getCategoryById);
 
 // Protected routes (admin only)
-categoryRoutes.post("/", verifyAuthToken, asyncHandler(createCategory));
-categoryRoutes.put("/:id", verifyAuthToken, asyncHandler(updateCategory));
-categoryRoutes.patch("/:id/toggle", verifyAuthToken, asyncHandler(toggleCategoryStatus));
-categoryRoutes.delete("/:id", verifyAuthToken, asyncHandler(deleteCategory));
+categoryRoutes.post("/", verifyAuthToken, createCategory);
+categoryRoutes.put("/:id", verifyAuthToken, updateCategory);
+categoryRoutes.patch("/:id/toggle", verifyAuthToken, toggleCategoryStatus);
+categoryRoutes.delete("/:id", verifyAuthToken, deleteCategory);
 
 export default categoryRoutes;

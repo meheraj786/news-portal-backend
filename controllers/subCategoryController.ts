@@ -1,10 +1,11 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
 import { createError } from "../utils/createError";
 import Category from "../models/categorySchema";
 import SubCategory from "../models/subCategorySchema";
+import { asyncHandler } from "../utils/asyncHandler";
 
 // CREATE
-export const createSubCategory = async (req: Request, res: Response, next: NextFunction) => {
+export const createSubCategory = asyncHandler(async (req: Request, res: Response) => {
   const { name, categoryId, isActive } = req.body;
   if (!name || !categoryId) throw createError("Name and Category ID required", 400);
 
@@ -23,10 +24,10 @@ export const createSubCategory = async (req: Request, res: Response, next: NextF
   });
 
   res.status(201).json({ success: true, data: subCategory });
-};
+});
 
 // DELETE
-export const deleteSubCategory = async (req: Request, res: Response, next: NextFunction) => {
+export const deleteSubCategory = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const subCategory = await SubCategory.findById(id);
   if (!subCategory) throw createError("Subcategory not found", 404);
@@ -38,10 +39,10 @@ export const deleteSubCategory = async (req: Request, res: Response, next: NextF
   await SubCategory.findByIdAndDelete(id);
 
   res.status(200).json({ success: true, message: "Deleted successfully" });
-};
+});
 
 // UPDATE
-export const updateSubCategory = async (req: Request, res: Response, next: NextFunction) => {
+export const updateSubCategory = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, categoryId, isActive } = req.body;
 
@@ -63,10 +64,10 @@ export const updateSubCategory = async (req: Request, res: Response, next: NextF
 
   await subCategory.save();
   res.status(200).json({ success: true, data: subCategory });
-};
+});
 
 // GET ALL
-export const getAllSubCategories = async (req: Request, res: Response, next: NextFunction) => {
+export const getAllSubCategories = asyncHandler(async (req: Request, res: Response) => {
   const { isActive, categoryId } = req.query;
   const filter: any = {};
   if (isActive !== undefined) filter.isActive = isActive === "true";
@@ -75,28 +76,28 @@ export const getAllSubCategories = async (req: Request, res: Response, next: Nex
   const subCategories = await SubCategory.find(filter).populate("category", "name slug").sort({ createdAt: -1 });
 
   res.status(200).json({ success: true, count: subCategories.length, data: subCategories });
-};
+});
 
 // GET BY ID
-export const getSubCategoryById = async (req: Request, res: Response, next: NextFunction) => {
+export const getSubCategoryById = asyncHandler(async (req: Request, res: Response) => {
   const subCategory = await SubCategory.findById(req.params.id).populate("category", "name slug");
   if (!subCategory) throw createError("Not found", 404);
   res.status(200).json({ success: true, data: subCategory });
-};
+});
 
 // GET BY SLUG
-export const getSubCategoryBySlug = async (req: Request, res: Response, next: NextFunction) => {
+export const getSubCategoryBySlug = asyncHandler(async (req: Request, res: Response) => {
   const { slug, categoryId } = req.params;
   const subCategory = await SubCategory.findOne({ slug, category: categoryId }).populate("category", "name slug");
   if (!subCategory) throw createError("Not found", 404);
   res.status(200).json({ success: true, data: subCategory });
-};
+});
 
 // TOGGLE STATUS
-export const toggleSubCategoryStatus = async (req: Request, res: Response, next: NextFunction) => {
+export const toggleSubCategoryStatus = asyncHandler(async (req: Request, res: Response) => {
   const subCategory = await SubCategory.findById(req.params.id);
   if (!subCategory) throw createError("Not found", 404);
   subCategory.isActive = !subCategory.isActive;
   await subCategory.save();
   res.status(200).json({ success: true, data: subCategory });
-};
+});
