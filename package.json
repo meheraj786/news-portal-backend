@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "tsc && node dist/index.js",
-    "seed": "node dist/utils/seed.js",
-    "prepare": "husky && husky install"
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "nodemon src/index.ts",
+    "prepare": "husky install"
   },
   "repository": {
     "type": "git",
@@ -29,7 +30,6 @@
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",
-    "ioredis": "^5.8.1",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.19.1",
     "multer": "^2.0.2",
@@ -43,7 +43,6 @@
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
-    "@types/ioredis": "^4.28.10",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.0.0",
     "@types/node": "^24.7.1",
