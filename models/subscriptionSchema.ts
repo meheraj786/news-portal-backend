@@ -18,6 +18,12 @@ const subscriptionSchema = new Schema<ISubscription>(
   },
   {
     timestamps: { createdAt: true, updatedAt: false }, // We only need createdAt
+    toJSON: {
+      transform: function (doc, ret: any) {
+        delete ret.__v;
+        return ret;
+      },
+    },
   }
 );
 

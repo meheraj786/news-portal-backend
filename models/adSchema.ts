@@ -45,7 +45,15 @@ const adSchema = new Schema<IAd>(
       default: true,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: {
+      transform: function (doc, ret: any) {
+        delete ret.__v;
+        return ret;
+      },
+    },
+  }
 );
 
 export const Ad = mongoose.model<IAd>("Ad", adSchema);
