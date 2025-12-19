@@ -15,7 +15,6 @@ const tagSchema = new Schema<ITag>(
       maxlength: [50, "Tag name cannot exceed 50 characters"],
       minlength: [2, "Tag name must be at least 2 characters"],
     },
-    // REMOVED: "posts" array. We don't store post IDs here anymore.
   },
   {
     timestamps: true,
