@@ -3,6 +3,7 @@ import { createError } from "../utils/createError";
 import Category from "../models/categorySchema";
 import SubCategory from "../models/subCategorySchema";
 import { asyncHandler } from "../utils/asyncHandler";
+import { Post } from "../models/postSchema";
 
 export const createCategory = asyncHandler(async (req: Request, res: Response) => {
   const { name, description } = req.body;
@@ -65,12 +66,20 @@ export const toggleCategoryStatus = asyncHandler(async (req: Request, res: Respo
 
 export const deleteCategory = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
+
   const category = await Category.findById(id);
   if (!category) throw createError("Category not found", 404);
 
+  // 1. Check for Subcategories
   const subCount = await SubCategory.countDocuments({ category: id });
   if (subCount > 0) {
     throw createError("Cannot delete category with existing subcategories.", 400);
+  }
+
+  // 2. Check for Posts (This is what you were missing)
+  const postCount = await Post.countDocuments({ category: id });
+  if (postCount > 0) {
+    throw createError(`Cannot delete category. It is used in ${postCount} posts.`, 400);
   }
 
   await Category.findByIdAndDelete(id);

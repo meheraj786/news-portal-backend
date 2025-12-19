@@ -13,6 +13,7 @@ interface CustomRequest extends Request {
   files?: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] };
 }
 
+// Helper to extract file from request
 const getFile = (req: CustomRequest): Express.Multer.File | undefined => {
   if (Array.isArray(req.files) && req.files.length > 0) return req.files[0];
   if (req.files && typeof req.files === "object") {
@@ -22,6 +23,7 @@ const getFile = (req: CustomRequest): Express.Multer.File | undefined => {
   return undefined;
 };
 
+// Helper to process tags into IDs
 const processTags = async (tags: string | string[]): Promise<Types.ObjectId[]> => {
   if (!tags) return [];
   let tagList: string[] = [];
@@ -51,29 +53,41 @@ const processTags = async (tags: string | string[]): Promise<Types.ObjectId[]> =
   );
 };
 
+// ==========================================
 // 1. Create Post
+// ==========================================
 export const createPost = asyncHandler(async (req: CustomRequest, res: Response) => {
   const { title, content, category, subCategory, tags, isDraft, isFavourite } = req.body;
   const file = getFile(req);
 
-  // FIX 1: If validation fails, DELETE the file Multer just uploaded
+  // --- VALIDATION START ---
+  // 1. Check required fields
   if (!title || !content || !category) {
     if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
-    throw createError("Required fields missing", 400);
+    throw createError("Required fields missing: title, content, category", 400);
   }
 
+  // 2. Check Title Length
+  if (title.length < 10) {
+    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    throw createError("Title must be at least 10 characters long", 400);
+  }
+
+  // 3. Check Image presence
   if (!file) throw createError("Image file is required", 400);
 
-  // FIX 2: Check Category validity BEFORE Cloudinary upload
+  // 4. Check Category Validity
   const categoryExists = await Category.findById(category);
   if (!categoryExists) {
     if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
     throw createError("Invalid Category ID", 400);
   }
+  // --- VALIDATION END ---
 
   // Upload to Cloudinary
   const imageData = await uploadToCloudinary(file.path, "news-posts");
-  // FIX 3: Immediate cleanup after successful upload
+
+  // Clean up local file immediately
   if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
   try {
@@ -97,51 +111,64 @@ export const createPost = asyncHandler(async (req: CustomRequest, res: Response)
 
     res.status(201).json({ success: true, message: "Post created", data: post });
   } catch (error) {
-    // FIX 4: DB Failed? Remove the image from Cloudinary (clean slate)
+    // Rollback: If DB save fails, remove image from Cloudinary
     await deleteFromCloudinary(imageData.publicId);
     throw error;
   }
 });
 
+// ==========================================
 // 2. Update Post
+// ==========================================
 export const updatePost = asyncHandler(async (req: CustomRequest, res: Response) => {
   const { postId } = req.params;
   const { title, content, category, subCategory, tags, isDraft } = req.body;
   const file = getFile(req);
 
+  // --- VALIDATION START ---
+  // 1. Check Title Length (only if title is being updated)
+  if (title && title.length < 10) {
+    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    throw createError("Title must be at least 10 characters long", 400);
+  }
+
   const oldPost = await Post.findById(postId);
   if (!oldPost) {
-    // FIX 5: If Post not found, delete uploaded file
     if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
     throw createError("Post not found", 404);
   }
 
+  // 2. Check Category Validity (only if category is being updated)
   if (category) {
     const categoryExists = await Category.findById(category);
     if (!categoryExists) {
-      // FIX 6: Invalid category on update? Delete file.
       if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
       throw createError("Invalid Category ID", 400);
     }
   }
+  // --- VALIDATION END ---
 
   let imageData = oldPost.image;
   let newImageUploaded = false;
 
   try {
+    // Handle New Image Upload
     if (file) {
       imageData = await uploadToCloudinary(file.path, "news-posts");
       newImageUploaded = true;
       if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
     }
 
+    // Handle Tags
     let newTagIds: Types.ObjectId[] = [];
     if (tags) {
       newTagIds = await processTags(tags);
     } else {
+      // Keep existing tags if not provided
       newTagIds = (oldPost.tags as unknown as Types.ObjectId[]) || [];
     }
 
+    // Perform Update
     const updatedPost = await Post.findByIdAndUpdate(
       postId,
       {
@@ -153,35 +180,40 @@ export const updatePost = asyncHandler(async (req: CustomRequest, res: Response)
         tags: newTagIds,
         isDraft: isDraft !== undefined ? isDraft : oldPost.isDraft,
       },
-      { new: true }
+      // IMPORTANT: runValidators ensures Schema rules (minlength, etc.) apply
+      { new: true, runValidators: true }
     )
       .populate("category", "name slug")
       .populate("subCategory", "name slug")
       .populate("tags", "name");
 
+    // Cleanup: Delete OLD image from Cloudinary if a NEW one was uploaded
     if (file && oldPost.image?.publicId) {
       await deleteFromCloudinary(oldPost.image.publicId);
     }
 
     res.status(200).json({ success: true, message: "Post updated", data: updatedPost });
   } catch (error) {
-    // FIX 7: Rollback new image if DB update fails
+    // Rollback: If DB update fails, delete the NEW image we just uploaded
     if (newImageUploaded && imageData.publicId) {
       await deleteFromCloudinary(imageData.publicId);
     }
-    // Also ensure local file is gone
+    // Ensure local file is gone
     if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
     throw error;
   }
 });
 
+// ==========================================
 // 3. Delete Post
+// ==========================================
 export const deletePost = asyncHandler(async (req: Request, res: Response) => {
   const { postId } = req.params;
   const post = await Post.findById(postId);
 
   if (!post) throw createError("Post not found", 404);
 
+  // Delete image from Cloudinary
   if (post.image?.publicId) {
     await deleteFromCloudinary(post.image.publicId);
   }
@@ -191,7 +223,9 @@ export const deletePost = asyncHandler(async (req: Request, res: Response) => {
   res.status(200).json({ success: true, message: "Post deleted successfully" });
 });
 
+// ==========================================
 // 4. Get Post By ID
+// ==========================================
 export const getPostById = asyncHandler(async (req: Request, res: Response) => {
   const post = await Post.findById(req.params.postId)
     .populate("category", "name slug")
@@ -202,7 +236,9 @@ export const getPostById = asyncHandler(async (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: post });
 });
 
-// 5. Get All Posts
+// ==========================================
+// 5. Get All Posts (Paginated + Filter)
+// ==========================================
 export const getAllPosts = asyncHandler(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
@@ -228,7 +264,9 @@ export const getAllPosts = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
+// ==========================================
 // 6. Search Posts
+// ==========================================
 export const searchPosts = asyncHandler(async (req: Request, res: Response) => {
   const { query, categoryName } = req.query;
   const page = parseInt(req.query.page as string) || 1;
@@ -272,7 +310,9 @@ export const searchPosts = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
+// ==========================================
 // 7. Get Trending Posts
+// ==========================================
 export const getTrendingPosts = asyncHandler(async (req: Request, res: Response) => {
   const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
