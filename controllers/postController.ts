@@ -9,12 +9,10 @@ import { createError } from "../utils/createError";
 import Category from "../models/categorySchema";
 import { asyncHandler } from "../utils/asyncHandler";
 
-// Interface for Request with Files
 interface CustomRequest extends Request {
   files?: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] };
 }
 
-// Helper: Get file
 const getFile = (req: CustomRequest): Express.Multer.File | undefined => {
   if (Array.isArray(req.files) && req.files.length > 0) return req.files[0];
   if (req.files && typeof req.files === "object") {
@@ -24,32 +22,23 @@ const getFile = (req: CustomRequest): Express.Multer.File | undefined => {
   return undefined;
 };
 
-// Helper: Process tags (Your JSON fix is included here)
 const processTags = async (tags: string | string[]): Promise<Types.ObjectId[]> => {
   if (!tags) return [];
-
   let tagList: string[] = [];
-
   if (Array.isArray(tags)) {
     tagList = tags;
   } else if (typeof tags === "string") {
     try {
       const parsed = JSON.parse(tags);
-      if (Array.isArray(parsed)) {
-        tagList = parsed;
-      } else {
-        tagList = [tags];
-      }
+      tagList = Array.isArray(parsed) ? parsed : [tags];
     } catch (error) {
       tagList = tags.split(",");
     }
   }
-
   tagList = tagList.map((t) => t.trim()).filter((t) => t.length > 0);
-
   if (tagList.length === 0) return [];
 
-  const tagIds = await Promise.all(
+  return Promise.all(
     tagList.map(async (tagName) => {
       const tag = await Tag.findOneAndUpdate(
         { name: tagName.toLowerCase() },
@@ -60,18 +49,31 @@ const processTags = async (tags: string | string[]): Promise<Types.ObjectId[]> =
       return tag._id as Types.ObjectId;
     })
   );
-  return tagIds;
 };
 
-// 1. Create Post (SIMPLIFIED)
+// 1. Create Post
 export const createPost = asyncHandler(async (req: CustomRequest, res: Response) => {
   const { title, content, category, subCategory, tags, isDraft, isFavourite } = req.body;
   const file = getFile(req);
 
-  if (!title || !content || !category) throw createError("Required fields missing", 400);
+  // FIX 1: If validation fails, DELETE the file Multer just uploaded
+  if (!title || !content || !category) {
+    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    throw createError("Required fields missing", 400);
+  }
+
   if (!file) throw createError("Image file is required", 400);
 
+  // FIX 2: Check Category validity BEFORE Cloudinary upload
+  const categoryExists = await Category.findById(category);
+  if (!categoryExists) {
+    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    throw createError("Invalid Category ID", 400);
+  }
+
+  // Upload to Cloudinary
   const imageData = await uploadToCloudinary(file.path, "news-posts");
+  // FIX 3: Immediate cleanup after successful upload
   if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
   try {
@@ -86,37 +88,50 @@ export const createPost = asyncHandler(async (req: CustomRequest, res: Response)
       image: imageData,
       category,
       subCategory: subCategory !== undefined ? subCategory : null,
-      tags: tagIds, // Just save the IDs here. Done.
+      tags: tagIds,
       isDraft: isDraft === "true" || isDraft === true,
       isFavourite: isFavourite === "true" || isFavourite === true,
     });
 
     await post.save();
 
-    // REMOVED: The logic to push ID to Tag collection.
-
     res.status(201).json({ success: true, message: "Post created", data: post });
   } catch (error) {
+    // FIX 4: DB Failed? Remove the image from Cloudinary (clean slate)
     await deleteFromCloudinary(imageData.publicId);
     throw error;
   }
 });
 
-// 2. Update Post (SIMPLIFIED)
+// 2. Update Post
 export const updatePost = asyncHandler(async (req: CustomRequest, res: Response) => {
   const { postId } = req.params;
   const { title, content, category, subCategory, tags, isDraft } = req.body;
   const file = getFile(req);
 
   const oldPost = await Post.findById(postId);
-  if (!oldPost) throw createError("Post not found", 404);
+  if (!oldPost) {
+    // FIX 5: If Post not found, delete uploaded file
+    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    throw createError("Post not found", 404);
+  }
+
+  if (category) {
+    const categoryExists = await Category.findById(category);
+    if (!categoryExists) {
+      // FIX 6: Invalid category on update? Delete file.
+      if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      throw createError("Invalid Category ID", 400);
+    }
+  }
 
   let imageData = oldPost.image;
+  let newImageUploaded = false;
 
   try {
     if (file) {
-      if (oldPost.image?.publicId) await deleteFromCloudinary(oldPost.image.publicId);
       imageData = await uploadToCloudinary(file.path, "news-posts");
+      newImageUploaded = true;
       if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
     }
 
@@ -135,7 +150,7 @@ export const updatePost = asyncHandler(async (req: CustomRequest, res: Response)
         image: imageData,
         category,
         subCategory,
-        tags: newTagIds, // Just overwrite. No complexity.
+        tags: newTagIds,
         isDraft: isDraft !== undefined ? isDraft : oldPost.isDraft,
       },
       { new: true }
@@ -144,16 +159,23 @@ export const updatePost = asyncHandler(async (req: CustomRequest, res: Response)
       .populate("subCategory", "name slug")
       .populate("tags", "name");
 
-    // REMOVED: The logic to pull/push IDs in Tag collection.
+    if (file && oldPost.image?.publicId) {
+      await deleteFromCloudinary(oldPost.image.publicId);
+    }
 
     res.status(200).json({ success: true, message: "Post updated", data: updatedPost });
   } catch (error) {
+    // FIX 7: Rollback new image if DB update fails
+    if (newImageUploaded && imageData.publicId) {
+      await deleteFromCloudinary(imageData.publicId);
+    }
+    // Also ensure local file is gone
     if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
     throw error;
   }
 });
 
-// 3. Delete Post (SIMPLIFIED)
+// 3. Delete Post
 export const deletePost = asyncHandler(async (req: Request, res: Response) => {
   const { postId } = req.params;
   const post = await Post.findById(postId);
@@ -165,8 +187,6 @@ export const deletePost = asyncHandler(async (req: Request, res: Response) => {
   }
 
   await Post.findByIdAndDelete(postId);
-
-  // REMOVED: The logic to pull ID from Tag collection.
 
   res.status(200).json({ success: true, message: "Post deleted successfully" });
 });
