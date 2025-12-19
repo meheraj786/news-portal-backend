@@ -17,7 +17,15 @@ const navMenuSchema = new Schema<INavMenu>(
       default: [],
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: {
+      transform: function (doc, ret: any) {
+        delete ret.__v;
+        return ret;
+      },
+    },
+  }
 );
 
 export const NavMenu = model<INavMenu>("NavMenu", navMenuSchema);

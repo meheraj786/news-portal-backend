@@ -6,8 +6,10 @@ import {
   getPostById,
   searchPosts,
   updatePost,
+  getTrendingPosts,
 } from "../../controllers/postController";
 import { upload } from "../../middleware/uploadMiddleware";
+import { trackPostView } from "../../middleware/viewCountMiddleware";
 import { verifyAuthToken } from "../../middleware/authMddleware";
 
 const postRoutes = express.Router();
@@ -17,15 +19,18 @@ const postRoutes = express.Router();
 // 1. Get All
 postRoutes.get("/", getAllPosts);
 
-// 2. Search (MUST be before /:postId)
+// 2. Search (Must be before /:postId)
 postRoutes.get("/search", searchPosts);
 
-// 3. Get Single (Dynamic ID)
-postRoutes.get("/:postId", getPostById);
+// 3. Trending (Must be before /:postId)
+postRoutes.get("/trending", getTrendingPosts);
+
+// 4. Get Single Post (Dynamic ID)
+// Middleware 'trackPostView' runs first to count the view
+postRoutes.get("/:postId", trackPostView, getPostById);
 
 // ================= PROTECTED ROUTES =================
 
-// Order: Auth Check -> File Handling -> Controller
 postRoutes.post("/", verifyAuthToken, upload.any(), createPost);
 
 postRoutes.put("/:postId", verifyAuthToken, upload.any(), updatePost);

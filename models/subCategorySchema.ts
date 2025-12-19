@@ -29,6 +29,12 @@ const subCategorySchema = new Schema(
   },
   {
     timestamps: true,
+    toJSON: {
+      transform: function (doc, ret: any) {
+        delete ret.__v;
+        return ret;
+      },
+    },
   }
 );
 
