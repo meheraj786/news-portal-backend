@@ -1,5 +1,4 @@
 import mongoose, { Schema } from "mongoose";
-import slugify from "slugify";
 
 const categorySchema = new Schema(
   {
@@ -49,7 +48,14 @@ const categorySchema = new Schema(
 // Auto-generate slug before saving
 categorySchema.pre("save", function (next) {
   if (this.isModified("name")) {
-    this.slug = slugify(this.name, { lower: true, strict: true });
+    this.slug = this.name
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-") // Replace spaces with -
+      .replace(/[^\w\u0980-\u09FF-]+/g, "") // Remove chars EXCEPT Bangla & English
+      .replace(/\-\-+/g, "-") // Replace multiple - with single -
+      .replace(/^-+/, "") // Trim - from start
+      .replace(/-+$/, ""); // Trim - from end
   }
   next();
 });
