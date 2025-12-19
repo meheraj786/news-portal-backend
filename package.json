@@ -1,11 +1,11 @@
 {
-  "name": "backend-template(ts)",
+  "name": "news-portal-backend",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "tsc && node dist/index.js",
-    "seed": "node dist/utils/seed.js",
-    "prepare": "husky && husky install"
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "nodemon src/index.ts"
   },
   "repository": {
     "type": "git",
@@ -20,7 +20,15 @@
   "homepage": "https://github.com/meheraj786/backend-starter-template-ts#readme",
   "description": "",
   "dependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.10.4",
+    "@types/nodemailer": "^7.0.4",
+    "@types/request-ip": "^0.0.41",
     "bcrypt": "^6.0.0",
     "cloudinary": "^1.41.3",
     "cookie-parser": "^1.4.7",
@@ -29,29 +37,18 @@
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",
-    "ioredis": "^5.8.1",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.19.1",
     "multer": "^2.0.2",
     "multer-storage-cloudinary": "^4.0.0",
     "nodemailer": "^7.0.11",
     "request-ip": "^3.3.0",
+    "typescript": "^5.9.3",
     "uuid": "^13.0.0",
     "zod": "^4.2.1"
   },
   "devDependencies": {
-    "@types/bcrypt": "^6.0.0",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.3",
-    "@types/ioredis": "^4.28.10",
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/multer": "^2.0.0",
-    "@types/node": "^24.7.1",
-    "@types/nodemailer": "^7.0.2",
-    "@types/request-ip": "^0.0.41",
-    "husky": "^9.1.7",
     "nodemon": "^3.1.10",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "ts-node": "^10.9.2"
   }
 }

@@ -13,12 +13,13 @@ const PORT = process.env.PORT || 5000;
 
 (async () => {
   try {
-    // This allows us to see the Real IP if behind Nginx/Heroku/Vercel
-    app.set("trust proxy", true);
+    // Crucial for Render: Allows Express to trust the HTTPS proxy
+    app.set("trust proxy", 1);
 
     app.use(
       cors({
-        origin: "http://localhost:5173",
+        // Dynamic origin: Uses your ENV variable in production, falls back to localhost for dev
+        origin: process.env.CLIENT_URL || "http://localhost:5173",
         credentials: true,
       })
     );
@@ -31,8 +32,12 @@ const PORT = process.env.PORT || 5000;
 
     app.use(errorHandler);
 
+    // Connect to DB before listening
+    await dbConnect();
+
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   } catch (error) {
     console.error("Something went wrong:", error);
+    process.exit(1); // Exit process on critical failure
   }
 })();
