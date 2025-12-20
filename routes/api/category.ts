@@ -12,14 +12,12 @@ import { verifyAuthToken } from "../../middleware/authMddleware";
 
 const categoryRoutes = express.Router();
 
-// Public routes
+// Public Routes
 categoryRoutes.get("/", getAllCategories);
+categoryRoutes.get("/slug/:slug", getCategoryBySlug); // Specific route first
+categoryRoutes.get("/:id", getCategoryById); // Generic ID route last
 
-// IMPORTANT: Moved Slug route to "/slug/:slug" to avoid conflict with "/:id"
-categoryRoutes.get("/slug/:slug", getCategoryBySlug);
-categoryRoutes.get("/:id", getCategoryById);
-
-// Protected routes (admin only)
+// Protected Routes (Admin)
 categoryRoutes.post("/", verifyAuthToken, createCategory);
 categoryRoutes.put("/:id", verifyAuthToken, updateCategory);
 categoryRoutes.patch("/:id/toggle", verifyAuthToken, toggleCategoryStatus);
