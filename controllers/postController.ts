@@ -388,3 +388,48 @@ export const getTrendingPosts = asyncHandler(async (req: Request, res: Response)
 
   res.status(200).json({ success: true, data: trendingStats });
 });
+
+// 8. Get Posts By Category (Dedicated Route)
+// Usage: GET /api/posts/category/:slugOrId
+export const getPostsByCategory = asyncHandler(async (req: Request, res: Response) => {
+  const { slugOrId } = req.params; // We expect the route to be /category/:slugOrId
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const skip = (page - 1) * limit;
+
+  let categoryId: any;
+
+  // 1. Determine if input is an ID or a Slug
+  if (Types.ObjectId.isValid(slugOrId)) {
+    // It's a valid ObjectId, assume it's an ID
+    categoryId = slugOrId;
+  } else {
+    // It's a Slug (e.g., "international-news")
+    const category = await Category.findOne({ slug: slugOrId });
+    if (!category) {
+      throw createError("Category not found", 404);
+    }
+    categoryId = category._id;
+  }
+
+  // 2. Fetch Posts for this Category
+  // We strictly filter by this category and usually exclude drafts for public view
+  const filter = { category: categoryId, isDraft: false };
+
+  const posts = await Post.find(filter)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .populate("category", "name slug")
+    .populate("subCategory", "name slug")
+    .populate("tags", "name");
+
+  const total = await Post.countDocuments(filter);
+
+  res.status(200).json({
+    success: true,
+    data: posts,
+    categoryName: slugOrId, // Helpful for frontend to know which category was fetched
+    pagination: { total, page, limit, pages: Math.ceil(total / limit) },
+  });
+});

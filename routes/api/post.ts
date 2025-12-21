@@ -7,6 +7,7 @@ import {
   searchPosts,
   getTrendingPosts,
   updatePost,
+  getPostsByCategory,
 } from "../../controllers/postController";
 import upload from "../../middleware/uploadMiddleware";
 import { trackPostView } from "../../middleware/viewCountMiddleware";
@@ -24,6 +25,7 @@ postRoutes.get("/trending", getTrendingPosts);
 
 postRoutes.get("/", getAllPosts);
 postRoutes.get("/:postId", trackPostView, getPostById);
+postRoutes.get("/category/:slugOrId", getPostsByCategory);
 
 // Create: Accept any field name. Middleware blocks non-images.
 postRoutes.post("/", verifyAuthToken, upload.any(), createPost);
