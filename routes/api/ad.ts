@@ -1,7 +1,7 @@
 import express from "express";
 import { createAd, deleteAd, getAllAds, toggleAdStatus, updateAd } from "../../controllers/adController";
-import { verifyAuthToken } from "../../middleware/authMddleware";
-import { upload } from "../../middleware/uploadMiddleware";
+import { verifyAuthToken } from "../../middleware/authMiddleware";
+import upload from "../../middleware/uploadMiddleware";
 
 const adRoutes = express.Router();
 

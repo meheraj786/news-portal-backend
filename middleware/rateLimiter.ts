@@ -1,84 +1,59 @@
-// middleware/rateLimiter.js
 import rateLimit from "express-rate-limit";
 
-// For login attempts - prevent password guessing
+// 1. LOGIN LIMITER (Strict)
+// Prevents brute-force password guessing
 export const loginRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15min
-  max: 5,
-  skipSuccessfulRequests: true, //only counts failed logins
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts per IP
+  skipSuccessfulRequests: true, // Only count failures
   message: {
     success: false,
-    message: "Too many login attempts. Please try again later.",
+    message: "Too many failed login attempts. Please try again in 15 minutes.",
   },
-  standardHeaders: true, // send rate limit info in headers
+  standardHeaders: true,
   legacyHeaders: false,
 });
 
-// For OTP requests - prevent email bombing
+// 2. OTP/EMAIL LIMITER (Strict)
+// Prevents email bombing/spamming
 export const otpRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 min
-  max: 5,
-  skipSuccessfulRequests: true, //only counts failed attempts
-  message: {
-    success: false,
-    message: "Too many OTP requests. Please try again in 15 minutes.",
-  },
-});
-
-// For cart operations - prevent cart spam
-const cartLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 20, // Max 20 cart operations per minute
-  message: {
-    success: false,
-    message: "Too many cart operations. Please slow down.",
-  },
-});
-
-// For order creation - prevent fake orders
-const orderLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // Max 10 orders per hour
+  max: 3, // Allow only 3 OTP requests per hour per IP
   message: {
     success: false,
-    message: "Too many orders. Please contact support if you need help.",
+    message: "Too many verification requests. Please try again in an hour.",
   },
 });
 
-// ============================================
-// 4. SEARCH/BROWSE LIMITERS
-// ============================================
-
-// For product search - prevent DB overload
-const searchLimiter = rateLimit({
+// 3. SEARCH LIMITER (Moderate)
+// Prevents database exhaustion from search spam
+export const searchLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 30, // 30 searches per minute
   message: {
     success: false,
-    message: "Too many search requests. Please wait a moment.",
+    message: "Too many search requests. Please slow down.",
   },
 });
 
-// General API access - base protection
-const apiLimiter = rateLimit({
+// 4. ADMIN LIMITER (Moderate)
+// Extra layer of security for admin actions
+export const adminLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 100, // 100 requests per minute (generous)
-  message: {
-    success: false,
-    message: "Too many requests. Please slow down.",
-  },
-});
-
-// ============================================
-// 5. ADMIN LIMITERS
-// ============================================
-
-// For admin operations - prevent abuse
-const adminLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 50, // 50 admin operations per minute
+  max: 50,
   message: {
     success: false,
     message: "Too many admin operations. Please slow down.",
+  },
+});
+
+// 5. GENERAL API LIMITER (Generous)
+// Base protection for all other routes
+export const apiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 100,
+  message: {
+    success: false,
+    message: "Too many requests. Please slow down.",
   },
 });

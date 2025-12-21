@@ -5,7 +5,17 @@ export interface IAdmin extends Document {
   username: string;
   email: string;
   password: string;
-  // otp fields
+
+  // NEW: Social Links
+  socialLinks: {
+    facebook?: string;
+    twitter?: string;
+    linkedin?: string;
+    instagram?: string;
+    youtube?: string;
+  };
+
+  // OTP fields
   otp: string | null;
   otpExpiry: Date | null;
   lastOtpRequest: Date | null;
@@ -40,13 +50,24 @@ const adminSchema = new Schema<IAdmin>(
       minlength: [8, "password must be at least 8 characters"],
       select: false,
     },
-    // otp fields
+
+    // NEW: Social Links (Optional)
+    socialLinks: {
+      facebook: { type: String, trim: true, default: "" },
+      twitter: { type: String, trim: true, default: "" },
+      linkedin: { type: String, trim: true, default: "" },
+      instagram: { type: String, trim: true, default: "" },
+      youtube: { type: String, trim: true, default: "" },
+    },
+
+    // OTP fields
     otp: { type: String, select: false },
     otpExpiry: { type: Date, select: false },
     lastOtpRequest: { type: Date, select: false },
     otpAttempts: { type: Number, default: 0, select: false },
     lockedUntil: { type: Date, select: false },
-    //reset password
+
+    // Reset password
     resetSessionActive: { type: Boolean, default: false, select: false },
     resetSessionExpiry: { type: Date, select: false },
     otpVerified: { type: Boolean, default: false, select: false },
@@ -71,20 +92,19 @@ const adminSchema = new Schema<IAdmin>(
   }
 );
 
-//password and otp hashing middleware
+// Password and OTP hashing middleware
 adminSchema.pre("save", async function (next) {
   if (!this.isModified("password") && !this.isModified("otp")) return next();
   try {
     if (this.isModified("password")) this.password = await bcrypt.hash(this.password, 10);
     if (this.otp && this.isModified("otp")) this.otp = await bcrypt.hash(this.otp, 10);
-
     next();
   } catch (error: any) {
     next(error);
   }
 });
 
-//custom instance method to compare password or otp
+// Custom instance method to compare password or otp
 adminSchema.methods.compareField = async function (field: "password" | "otp", value: string): Promise<boolean> {
   if (field === "password") {
     return await bcrypt.compare(value, this.password);

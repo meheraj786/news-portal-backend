@@ -1,52 +1,56 @@
 import { Request, Response, NextFunction } from "express";
 import requestIp from "request-ip";
+import mongoose from "mongoose";
 import { Post } from "../models/postSchema";
 import { PostView } from "../models/postViewSchema";
 import { asyncHandler } from "../utils/asyncHandler";
 
 export const trackPostView = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-  const { postId } = req.params;
+  // WRAP IN TRY/CATCH: So DB errors don't block the user from reading the post
+  try {
+    const postId = req.params.id || req.params.postId;
 
-  // Safety Check: skip if ID is invalid
-  if (!postId || !postId.match(/^[0-9a-fA-F]{24}$/)) {
-    return next();
+    // Safety: Skip if ID is missing or invalid MongoID
+    if (!postId || !mongoose.isValidObjectId(postId)) {
+      return next();
+    }
+
+    // 1. Get User Identity
+    const userAgent = req.headers["user-agent"] || "unknown";
+    let clientIp = requestIp.getClientIp(req) || "unknown";
+
+    // Normalize IP
+    if (clientIp === "::1") clientIp = "127.0.0.1";
+    if (clientIp.startsWith("::ffff:")) clientIp = clientIp.replace("::ffff:", "");
+
+    // 2. Check Uniqueness (Last 24 Hours)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const existingView = await PostView.findOne({
+      post: postId,
+      ip: clientIp,
+      userAgent: userAgent,
+      createdAt: { $gte: twentyFourHoursAgo },
+    });
+
+    // 3. Record View
+    if (!existingView) {
+      await Promise.all([
+        // Log for Dashboard/Trending
+        PostView.create({
+          post: postId,
+          ip: clientIp,
+          userAgent: userAgent,
+        }),
+        // Increment Count for Post Details
+        Post.findByIdAndUpdate(postId, { $inc: { views: 1 } }),
+      ]);
+    }
+  } catch (error) {
+    // SILENT FAIL: Log error but allow request to proceed
+    console.error("View Tracking Error (Ignored):", error);
   }
 
-  // 1. Get the Raw IP (This might be ::1, ::ffff:127.0.0.1, or 103.239...)
-  let clientIp = requestIp.getClientIp(req) || "unknown";
-
-  // ============================================================
-  // IP NORMALIZATION (Force IPv4 style)
-  // ============================================================
-
-  // Case A: Localhost IPv6 -> Convert to standard 127.0.0.1
-  if (clientIp === "::1") {
-    clientIp = "127.0.0.1";
-  }
-
-  // Case B: IPv4-Mapped-IPv6 (e.g., ::ffff:192.168.1.1) -> Remove prefix
-  // This happens when an IPv4 user connects to a Node server listening on IPv6
-  if (clientIp.startsWith("::ffff:")) {
-    clientIp = clientIp.replace("::ffff:", "");
-  }
-
-  // ============================================================
-
-  // Logic: Check for unique view in last 24h
-  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-  const existingView = await PostView.findOne({
-    post: postId,
-    ip: clientIp, // Now we search using the Clean IPv4
-    createdAt: { $gte: twentyFourHoursAgo },
-  });
-
-  if (!existingView) {
-    await Promise.all([
-      PostView.create({ post: postId, ip: clientIp }),
-      Post.findByIdAndUpdate(postId, { $inc: { views: 1 } }),
-    ]);
-  }
-
+  // Always proceed to the controller
   next();
 });

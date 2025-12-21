@@ -8,16 +8,16 @@ import {
   toggleCategoryStatus,
   updateCategory,
 } from "../../controllers/categoryController";
-import { verifyAuthToken } from "../../middleware/authMddleware";
+import { verifyAuthToken } from "../../middleware/authMiddleware";
 
 const categoryRoutes = express.Router();
 
-// Public Routes
+// Public
 categoryRoutes.get("/", getAllCategories);
-categoryRoutes.get("/slug/:slug", getCategoryBySlug); // Specific route first
-categoryRoutes.get("/:id", getCategoryById); // Generic ID route last
+categoryRoutes.get("/slug/:slug", getCategoryBySlug);
+categoryRoutes.get("/:id", getCategoryById);
 
-// Protected Routes (Admin)
+// Protected
 categoryRoutes.post("/", verifyAuthToken, createCategory);
 categoryRoutes.put("/:id", verifyAuthToken, updateCategory);
 categoryRoutes.patch("/:id/toggle", verifyAuthToken, toggleCategoryStatus);

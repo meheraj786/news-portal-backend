@@ -1,103 +1,89 @@
+/*
 import { Request, Response } from "express";
 import { createError } from "../utils/createError";
-import Category from "../models/categorySchema";
 import SubCategory from "../models/subCategorySchema";
+import Category from "../models/categorySchema";
+import { Post } from "../models/postSchema";
 import { asyncHandler } from "../utils/asyncHandler";
 
-// CREATE
+// 1. Create SubCategory
 export const createSubCategory = asyncHandler(async (req: Request, res: Response) => {
-  const { name, categoryId, isActive } = req.body;
-  if (!name || !categoryId) throw createError("Name and Category ID required", 400);
+  const { name, categoryId, description } = req.body;
 
-  const category = await Category.findById(categoryId);
-  if (!category) throw createError("Parent Category not found", 404);
+  if (!name || !categoryId) throw createError("Name and Category ID are required", 400);
+
+  // Validate Parent Category
+  const parent = await Category.findById(categoryId);
+  if (!parent) throw createError("Parent category not found", 404);
+
+  // Check Duplicate (Name must be unique)
+  const existing = await SubCategory.findOne({ name });
+  if (existing) throw createError("SubCategory name already exists", 409);
 
   const subCategory = new SubCategory({
     name,
     category: categoryId,
-    isActive: isActive ?? true,
+    description: description || null,
   });
-  await subCategory.save();
-
-  await Category.findByIdAndUpdate(categoryId, {
-    $push: { subCategories: subCategory._id },
-  });
-
-  res.status(201).json({ success: true, data: subCategory });
-});
-
-// DELETE
-export const deleteSubCategory = asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const subCategory = await SubCategory.findById(id);
-  if (!subCategory) throw createError("Subcategory not found", 404);
-
-  await Category.findByIdAndUpdate(subCategory.category, {
-    $pull: { subCategories: subCategory._id },
-  });
-
-  await SubCategory.findByIdAndDelete(id);
-
-  res.status(200).json({ success: true, message: "Deleted successfully" });
-});
-
-// UPDATE
-export const updateSubCategory = asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const { name, categoryId, isActive } = req.body;
-
-  const subCategory = await SubCategory.findById(id);
-  if (!subCategory) throw createError("Subcategory not found", 404);
-
-  if (categoryId && categoryId !== subCategory.category.toString()) {
-    await Category.findByIdAndUpdate(subCategory.category, {
-      $pull: { subCategories: subCategory._id },
-    });
-    await Category.findByIdAndUpdate(categoryId, {
-      $push: { subCategories: subCategory._id },
-    });
-    subCategory.category = categoryId;
-  }
-
-  if (name) subCategory.name = name;
-  if (isActive !== undefined) subCategory.isActive = isActive;
 
   await subCategory.save();
-  res.status(200).json({ success: true, data: subCategory });
+  res.status(201).json({ success: true, message: "SubCategory created", data: subCategory });
 });
 
-// GET ALL
+// 2. Get All SubCategories (Filter by Parent Optional)
 export const getAllSubCategories = asyncHandler(async (req: Request, res: Response) => {
-  const { isActive, categoryId } = req.query;
-  const filter: any = {};
-  if (isActive !== undefined) filter.isActive = isActive === "true";
-  if (categoryId) filter.category = categoryId;
+  const { categoryId } = req.query;
+  const filter = categoryId ? { category: categoryId } : {};
 
-  const subCategories = await SubCategory.find(filter).populate("category", "name slug").sort({ createdAt: -1 });
+  const subCategories = await SubCategory.find(filter)
+    .populate("category", "name slug") // Populate parent info
+    .sort({ createdAt: -1 });
 
   res.status(200).json({ success: true, count: subCategories.length, data: subCategories });
 });
 
-// GET BY ID
-export const getSubCategoryById = asyncHandler(async (req: Request, res: Response) => {
-  const subCategory = await SubCategory.findById(req.params.id).populate("category", "name slug");
-  if (!subCategory) throw createError("Not found", 404);
-  res.status(200).json({ success: true, data: subCategory });
-});
+// 3. Update SubCategory
+export const updateSubCategory = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, description, categoryId, isActive } = req.body;
 
-// GET BY SLUG
-export const getSubCategoryBySlug = asyncHandler(async (req: Request, res: Response) => {
-  const { slug, categoryId } = req.params;
-  const subCategory = await SubCategory.findOne({ slug, category: categoryId }).populate("category", "name slug");
-  if (!subCategory) throw createError("Not found", 404);
-  res.status(200).json({ success: true, data: subCategory });
-});
+  const subCategory = await SubCategory.findById(id);
+  if (!subCategory) throw createError("SubCategory not found", 404);
 
-// TOGGLE STATUS
-export const toggleSubCategoryStatus = asyncHandler(async (req: Request, res: Response) => {
-  const subCategory = await SubCategory.findById(req.params.id);
-  if (!subCategory) throw createError("Not found", 404);
-  subCategory.isActive = !subCategory.isActive;
+  // If changing name, check duplicate
+  if (name && name !== subCategory.name) {
+    const existing = await SubCategory.findOne({ name });
+    if (existing) throw createError("SubCategory name already exists", 409);
+    subCategory.name = name; // Pre-save hook will handle slug
+  }
+
+  // If changing parent
+  if (categoryId) {
+    const parent = await Category.findById(categoryId);
+    if (!parent) throw createError("New parent category not found", 404);
+    subCategory.category = categoryId;
+  }
+
+  if (description !== undefined) subCategory.description = description;
+  if (isActive !== undefined) subCategory.isActive = isActive;
+
   await subCategory.save();
-  res.status(200).json({ success: true, data: subCategory });
+  res.status(200).json({ success: true, message: "Updated successfully", data: subCategory });
 });
+
+// 4. Delete SubCategory
+export const deleteSubCategory = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  // Check if used in Posts
+  const postCount = await Post.countDocuments({ subCategory: id });
+  if (postCount > 0) {
+    throw createError(`Cannot delete: This subcategory is used in ${postCount} posts.`, 400);
+  }
+
+  const deleted = await SubCategory.findByIdAndDelete(id);
+  if (!deleted) throw createError("SubCategory not found", 404);
+
+  res.status(200).json({ success: true, message: "SubCategory deleted successfully" });
+});
+*/

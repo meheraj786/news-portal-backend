@@ -1,24 +1,31 @@
 import { Request, Response } from "express";
+import { Types } from "mongoose"; // <--- Added this import for type safety
 import { Tag } from "../models/tagSchema";
 import { Post } from "../models/postSchema";
 import { createError } from "../utils/createError";
 import { asyncHandler } from "../utils/asyncHandler";
 
-// 1. Get All Tags (with Post Count calculated on the fly)
+// 1. Get All Tags (Optimized: No more N+1 Query Loop)
 export const getAllTags = asyncHandler(async (req: Request, res: Response) => {
+  // A. Aggregation: Group posts by tag and count them in ONE database operation
+  const tagCounts = await Post.aggregate([
+    { $unwind: "$tags" }, // Deconstructs the tags array field
+    { $group: { _id: "$tags", count: { $sum: 1 } } }, // Groups by Tag ID and sums them up
+  ]);
+
+  // B. Create a Map for O(1) instant lookup
+  // Key: Tag ID (string), Value: Count (number)
+  const countMap = new Map(tagCounts.map((t) => [t._id.toString(), t.count]));
+
+  // C. Fetch all tags (1 Query)
   const tags = await Tag.find().sort({ createdAt: -1 });
 
-  const tagsWithCount = await Promise.all(
-    tags.map(async (tag) => {
-      // We calculate the count here instead of storing it
-      const count = await Post.countDocuments({ tags: tag._id });
-      return {
-        _id: tag._id,
-        name: tag.name,
-        postCount: count,
-      };
-    })
-  );
+  // D. Merge the counts in memory (Fast)
+  const tagsWithCount = tags.map((tag) => ({
+    _id: tag._id,
+    name: tag.name,
+    postCount: countMap.get((tag._id as Types.ObjectId).toString()) || 0,
+  }));
 
   res.status(200).json({ success: true, data: tagsWithCount });
 });

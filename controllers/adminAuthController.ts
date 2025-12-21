@@ -1,4 +1,4 @@
-import { Request, Response } from "express"; // Removed NextFunction
+import { NextFunction, Request, Response } from "express"; // Removed NextFunction
 import Admin from "../models/adminSchema";
 import { createError } from "../utils/createError";
 import jwt from "jsonwebtoken";
@@ -104,7 +104,7 @@ export const requestVerification = asyncHandler(async (req: Request, res: Respon
   await admin.save();
 
   // Send Email
-  await sendEmail(email, "verification", otp);
+  sendEmail(email, "verification", otp).catch((err) => console.error("Email failed:", err));
 
   res.status(200).json({
     success: true,
@@ -241,3 +241,68 @@ export const logout = (req: Request, res: Response) => {
     message: "Logged out successfully",
   });
 };
+
+// ------------------ PROFILE --------------------------------
+
+export const getMe = asyncHandler(async (req: Request, res: Response) => {
+  const admin = await Admin.findById(req.admin?.id);
+  if (!admin) throw createError("Admin account not found", 404);
+
+  res.status(200).json({ success: true, data: admin });
+});
+
+// 7. UPDATE SOCIAL LINKS (Authenticated)
+// ==========================================
+export const updateSocialLinks = asyncHandler(async (req: Request, res: Response) => {
+  const { facebook, twitter, linkedin, instagram, youtube } = req.body;
+
+  const admin = await Admin.findById(req.admin?.id);
+  if (!admin) throw createError("Admin not found", 404);
+
+  // Initialize if missing
+  if (!admin.socialLinks) {
+    admin.socialLinks = { facebook: "", twitter: "", linkedin: "", instagram: "", youtube: "" };
+  }
+
+  // Update provided fields
+  if (facebook !== undefined) admin.socialLinks.facebook = facebook;
+  if (twitter !== undefined) admin.socialLinks.twitter = twitter;
+  if (linkedin !== undefined) admin.socialLinks.linkedin = linkedin;
+  if (instagram !== undefined) admin.socialLinks.instagram = instagram;
+  if (youtube !== undefined) admin.socialLinks.youtube = youtube;
+
+  // IMPORTANT: Mark modified for nested objects
+  admin.markModified("socialLinks");
+
+  await admin.save();
+
+  res.status(200).json({
+    success: true,
+    message: "Social links updated successfully",
+    data: admin.socialLinks,
+  });
+});
+
+// 8. CHANGE PASSWORD (Authenticated)
+// ==========================================
+export const changePassword = asyncHandler(async (req: Request, res: Response) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    throw createError("Please provide both current and new passwords", 400);
+  }
+  if (newPassword.length < 8) {
+    throw createError("New password must be at least 8 characters", 400);
+  }
+
+  const admin = await Admin.findById(req.admin?.id).select("+password");
+  if (!admin) throw createError("Admin not found", 404);
+
+  const isMatch = await admin.compareField("password", currentPassword);
+  if (!isMatch) throw createError("Incorrect current password", 401);
+
+  admin.password = newPassword;
+  await admin.save();
+
+  res.status(200).json({ success: true, message: "Password changed successfully" });
+});

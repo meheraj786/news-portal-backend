@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
 import { createError } from "../utils/createError"; // Importing your custom error handler
 import { NavMenu } from "../models/navMenu";
 import { asyncHandler } from "../utils/asyncHandler";
@@ -15,8 +15,9 @@ export const getNavMenu = asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
-  // Clean nulls
-  const categories = menu.categoryIds.filter(Boolean);
+  // FIX: Safe access with fallback to empty array
+  // Prevents crash if 'categoryIds' is undefined/null in the DB
+  const categories = (menu.categoryIds || []).filter(Boolean);
 
   res.status(200).json(categories);
 });

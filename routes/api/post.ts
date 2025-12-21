@@ -5,36 +5,29 @@ import {
   getAllPosts,
   getPostById,
   searchPosts,
-  updatePost,
   getTrendingPosts,
+  updatePost,
 } from "../../controllers/postController";
-import { upload } from "../../middleware/uploadMiddleware";
+import upload from "../../middleware/uploadMiddleware";
 import { trackPostView } from "../../middleware/viewCountMiddleware";
-import { verifyAuthToken } from "../../middleware/authMddleware";
+import { verifyAuthToken } from "../../middleware/authMiddleware";
 
 const postRoutes = express.Router();
 
-// ================= PUBLIC ROUTES =================
+// ==========================================
+// PUBLIC ROUTES
+// ==========================================
 
-// 1. Get All
-postRoutes.get("/", getAllPosts);
-
-// 2. Search (Must be before /:postId)
+// 1. Search & Trending (MUST be defined before /:postId)
 postRoutes.get("/search", searchPosts);
-
-// 3. Trending (Must be before /:postId)
 postRoutes.get("/trending", getTrendingPosts);
 
-// 4. Get Single Post (Dynamic ID)
-// Middleware 'trackPostView' runs first to count the view
+postRoutes.get("/", getAllPosts);
 postRoutes.get("/:postId", trackPostView, getPostById);
 
-// ================= PROTECTED ROUTES =================
-
+// Create: Accept any field name. Middleware blocks non-images.
 postRoutes.post("/", verifyAuthToken, upload.any(), createPost);
-
 postRoutes.put("/:postId", verifyAuthToken, upload.any(), updatePost);
-
 postRoutes.delete("/:postId", verifyAuthToken, deletePost);
 
 export default postRoutes;

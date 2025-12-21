@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getNavMenu, updateNavMenu } from "../../controllers/navMenuController";
-import { verifyAuthToken } from "../../middleware/authMddleware";
+import { verifyAuthToken } from "../../middleware/authMiddleware";
 
 const router = Router();
 
