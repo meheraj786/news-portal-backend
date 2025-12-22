@@ -7,8 +7,10 @@ import tagRoutes from "./tag";
 import adRoutes from "./ad";
 import subscriptionRoutes from "./subscription";
 import dashboardRoutes from "./dashboard";
+import { apiLimiter } from "../../middleware/rateLimiter";
 
 const router = express.Router();
+router.use(apiLimiter);
 
 router.use("/admin", authRoutes);
 router.use("/nav-menu", navMenuRoutes);

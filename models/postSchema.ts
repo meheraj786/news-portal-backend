@@ -12,7 +12,6 @@ export interface IPost extends Document {
   tags: Types.ObjectId[];
   views: number;
   isFavourite: boolean;
-  isDraft: boolean;
 }
 
 const postSchema = new Schema<IPost>(
@@ -66,11 +65,6 @@ const postSchema = new Schema<IPost>(
       default: false,
       index: true,
     },
-    isDraft: {
-      type: Boolean,
-      default: true,
-      index: true,
-    },
   },
   {
     timestamps: true,
@@ -83,7 +77,10 @@ const postSchema = new Schema<IPost>(
   }
 );
 
-postSchema.index({ category: 1, isDraft: 1 });
+// --- INDEXES ---
 postSchema.index({ createdAt: -1 });
+
+// IMPORTANT: Kept the Text Index for your Search Controller
+postSchema.index({ title: "text", content: "text" });
 
 export const Post = mongoose.model<IPost>("Post", postSchema);

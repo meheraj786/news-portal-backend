@@ -1,5 +1,16 @@
 import rateLimit from "express-rate-limit";
 
+export const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200,
+  message: {
+    success: false,
+    message: "Too many requests from this IP, please try again after 15 minutes",
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
 // 1. LOGIN LIMITER (Strict)
 // Prevents brute-force password guessing
 export const loginRateLimiter = rateLimit({
@@ -44,16 +55,5 @@ export const adminLimiter = rateLimit({
   message: {
     success: false,
     message: "Too many admin operations. Please slow down.",
-  },
-});
-
-// 5. GENERAL API LIMITER (Generous)
-// Base protection for all other routes
-export const apiLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 100,
-  message: {
-    success: false,
-    message: "Too many requests. Please slow down.",
   },
 });
