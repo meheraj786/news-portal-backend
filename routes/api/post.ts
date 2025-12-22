@@ -12,6 +12,7 @@ import {
 import upload from "../../middleware/uploadMiddleware";
 import { trackPostView } from "../../middleware/viewCountMiddleware";
 import { verifyAuthToken } from "../../middleware/authMiddleware";
+import { searchLimiter } from "../../middleware/rateLimiter";
 
 const postRoutes = express.Router();
 
@@ -20,7 +21,7 @@ const postRoutes = express.Router();
 // ==========================================
 
 // 1. Search & Trending (MUST be defined before /:postId)
-postRoutes.get("/search", searchPosts);
+postRoutes.get("/search", searchLimiter, searchPosts);
 postRoutes.get("/trending", getTrendingPosts);
 
 postRoutes.get("/", getAllPosts);
