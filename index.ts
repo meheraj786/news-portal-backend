@@ -42,7 +42,13 @@ const BASE_URL = process.env.BASE_URL || "api/v1";
     // Connect to DB before listening
     await dbConnect();
 
-    app.listen(PORT, () => console.log(`✅ Server running - http://localhost:${PORT}${BASE_URL}`));
+    app.listen(PORT, () =>
+      console.log(
+        process.env.NODE_ENV === "development"
+          ? `✅ Server running - http://localhost:${PORT}${BASE_URL}`
+          : "✅ Server running"
+      )
+    );
   } catch (error) {
     console.error("Something went wrong:", error);
     process.exit(1); // Exit process on critical failure

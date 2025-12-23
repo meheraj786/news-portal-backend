@@ -17,7 +17,13 @@ interface CustomRequest extends Request {
 // HELPERS
 // ==========================================
 
-// 1. Extract file from 'upload.any()' or named fields
+// Helper: Non-blocking file deletion
+const safeDelete = (path: string) => {
+  fs.unlink(path, (err) => {
+    if (err) console.error(`Failed to delete file at ${path}:`, err);
+  });
+};
+
 const getFile = (req: CustomRequest): Express.Multer.File | undefined => {
   if (Array.isArray(req.files) && req.files.length > 0) return req.files[0];
   if (req.files && typeof req.files === "object") {
@@ -27,7 +33,7 @@ const getFile = (req: CustomRequest): Express.Multer.File | undefined => {
   return undefined;
 };
 
-// 2. Process Tags (Handle JSON string or Comma-separated)
+// Process Tags (Optimized BulkWrite)
 const processTags = async (tags: string | string[]): Promise<Types.ObjectId[]> => {
   if (!tags) return [];
   let tagList: string[] = [];
@@ -43,23 +49,25 @@ const processTags = async (tags: string | string[]): Promise<Types.ObjectId[]> =
     }
   }
 
-  tagList = tagList.map((t) => t.trim()).filter((t) => t.length > 0);
-  if (tagList.length === 0) return [];
+  const uniqueNames = [...new Set(tagList.map((t) => t.trim().toLowerCase()).filter((t) => t.length > 0))];
+  if (uniqueNames.length === 0) return [];
 
-  return Promise.all(
-    tagList.map(async (tagName) => {
-      const tag = await Tag.findOneAndUpdate(
-        { name: tagName.toLowerCase() },
-        { name: tagName.toLowerCase() },
-        { upsert: true, new: true }
-      );
-      if (!tag) throw createError("Error processing tags", 500);
-      return tag._id as Types.ObjectId;
-    })
-  );
+  const bulkOps = uniqueNames.map((name) => ({
+    updateOne: {
+      filter: { name },
+      update: { $set: { name } },
+      upsert: true,
+    },
+  }));
+
+  if (bulkOps.length > 0) {
+    await Tag.bulkWrite(bulkOps);
+  }
+
+  const foundTags = await Tag.find({ name: { $in: uniqueNames } }).select("_id");
+  return foundTags.map((tag) => tag._id as Types.ObjectId);
 };
 
-// 3. Regex Escape (Prevents crash on search characters like "(", ")", "+")
 const escapeRegex = (text: string) => {
   return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
 };
@@ -70,17 +78,17 @@ const escapeRegex = (text: string) => {
 
 // 1. Create Post
 export const createPost = asyncHandler(async (req: CustomRequest, res: Response) => {
-  const { title, content, category, subCategory, tags, isDraft, isFavourite } = req.body;
+  const { title, content, category, subCategory, tags, isFavourite } = req.body;
   const file = getFile(req);
 
   // --- VALIDATION ---
   if (!title || !content || !category) {
-    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    if (file) safeDelete(file.path);
     throw createError("Required fields missing: title, content, category", 400);
   }
 
   if (title.length < 10) {
-    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    if (file) safeDelete(file.path);
     throw createError("Title must be at least 10 characters long", 400);
   }
 
@@ -88,22 +96,17 @@ export const createPost = asyncHandler(async (req: CustomRequest, res: Response)
 
   const categoryExists = await Category.findById(category);
   if (!categoryExists) {
-    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    if (file) safeDelete(file.path);
     throw createError("Invalid Category ID", 400);
   }
 
   // --- UPLOAD ---
   const imageData = await uploadToCloudinary(file.path, "news-posts");
-  if (fs.existsSync(file.path)) {
-    try {
-      fs.unlinkSync(file.path);
-    } catch (e) {}
-  }
+  if (file) safeDelete(file.path);
 
   try {
     const tagIds = await processTags(tags);
 
-    // FIX: Handle FormData "null"/"undefined" strings for subCategory
     let cleanSubCategory = subCategory;
     if (!subCategory || subCategory === "null" || subCategory === "undefined" || subCategory === "") {
       cleanSubCategory = null;
@@ -116,7 +119,6 @@ export const createPost = asyncHandler(async (req: CustomRequest, res: Response)
       category,
       subCategory: cleanSubCategory,
       tags: tagIds,
-      isDraft: isDraft === "true" || isDraft === true,
       isFavourite: isFavourite === "true" || isFavourite === true,
     });
 
@@ -128,26 +130,23 @@ export const createPost = asyncHandler(async (req: CustomRequest, res: Response)
   }
 });
 
-// 2. Update Post (Partial / Dynamic Update)
+// 2. Update Post
 export const updatePost = asyncHandler(async (req: CustomRequest, res: Response) => {
   const { postId } = req.params;
-  const { title, content, category, subCategory, tags, isDraft, isFavourite } = req.body;
+  const { title, content, category, subCategory, tags, isFavourite } = req.body;
   const file = getFile(req);
 
-  // 1. Check if Post Exists
   const oldPost = await Post.findById(postId);
   if (!oldPost) {
-    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    if (file) safeDelete(file.path);
     throw createError("Post not found", 404);
   }
 
-  // 2. Initialize Dynamic Update Object
   const updateData: any = {};
 
-  // --- FIELD PROCESSING ---
   if (title) {
     if (title.length < 10) {
-      if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      if (file) safeDelete(file.path);
       throw createError("Title must be at least 10 characters long", 400);
     }
     updateData.title = title;
@@ -158,13 +157,12 @@ export const updatePost = asyncHandler(async (req: CustomRequest, res: Response)
   if (category) {
     const categoryExists = await Category.findById(category);
     if (!categoryExists) {
-      if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      if (file) safeDelete(file.path);
       throw createError("Invalid Category ID", 400);
     }
     updateData.category = category;
   }
 
-  // Handle Removal or Update of SubCategory
   if (subCategory !== undefined) {
     if (subCategory === "null" || subCategory === "undefined" || subCategory === "") {
       updateData.subCategory = null;
@@ -177,15 +175,10 @@ export const updatePost = asyncHandler(async (req: CustomRequest, res: Response)
     updateData.tags = await processTags(tags);
   }
 
-  if (isDraft !== undefined) {
-    updateData.isDraft = isDraft === "true" || isDraft === true;
-  }
-
   if (isFavourite !== undefined) {
     updateData.isFavourite = isFavourite === "true" || isFavourite === true;
   }
 
-  // --- IMAGE PROCESSING ---
   let imageData = oldPost.image;
   let newImageUploaded = false;
 
@@ -194,21 +187,14 @@ export const updatePost = asyncHandler(async (req: CustomRequest, res: Response)
       imageData = await uploadToCloudinary(file.path, "news-posts");
       newImageUploaded = true;
       updateData.image = imageData;
-
-      if (fs.existsSync(file.path)) {
-        try {
-          fs.unlinkSync(file.path);
-        } catch (e) {}
-      }
+      if (file) safeDelete(file.path);
     }
 
-    // --- PERFORM UPDATE ---
     const updatedPost = await Post.findByIdAndUpdate(postId, updateData, { new: true, runValidators: true })
       .populate("category", "name slug")
       .populate("subCategory", "name slug")
       .populate("tags", "name");
 
-    // Cleanup: Delete OLD image if NEW one uploaded
     if (newImageUploaded && oldPost.image?.publicId) {
       await deleteFromCloudinary(oldPost.image.publicId);
     }
@@ -218,7 +204,7 @@ export const updatePost = asyncHandler(async (req: CustomRequest, res: Response)
     if (newImageUploaded && imageData.publicId) {
       await deleteFromCloudinary(imageData.publicId);
     }
-    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    if (file) safeDelete(file.path);
     throw error;
   }
 });
@@ -248,68 +234,32 @@ export const getPostById = asyncHandler(async (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: post });
 });
 
-// 5. Get All Posts (AND Get Posts by Category)
-// Supports: ?category=ID OR ?category=slug-name
+// 5. Get All Posts (Feed)
 export const getAllPosts = asyncHandler(async (req: Request, res: Response) => {
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 10;
-  const skip = (page - 1) * limit;
-
-  const filter: any = {};
-
-  // A. Category Filter (Handles both ID and Slug)
-  if (req.query.category) {
-    const catInput = req.query.category as string;
-
-    if (Types.ObjectId.isValid(catInput)) {
-      filter.category = catInput;
-    } else {
-      const categoryDoc = await Category.findOne({ slug: catInput });
-      if (categoryDoc) {
-        filter.category = categoryDoc._id;
-      } else {
-        // Return empty if slug not found
-        return res.status(200).json({
-          success: true,
-          data: [],
-          pagination: { total: 0, page, limit, pages: 0 },
-        });
-      }
-    }
-  }
-
-  // B. Draft Filter
-  if (req.query.isDraft) filter.isDraft = req.query.isDraft === "true";
-
-  const posts = await Post.find(filter)
+  const posts = await Post.find()
     .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
     .populate("category", "name slug")
     .populate("subCategory", "name slug")
     .populate("tags", "name");
 
-  const total = await Post.countDocuments(filter);
   res.status(200).json({
     success: true,
+    count: posts.length,
     data: posts,
-    pagination: { total, page, limit, pages: Math.ceil(total / limit) },
   });
 });
 
-// 6. Search Posts (Global Search Bar)
-// Searches Title + Category Name (Optional)
+// 6. Search Posts (Optimized)
 export const searchPosts = asyncHandler(async (req: Request, res: Response) => {
   const { query, categoryName } = req.query;
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
   const skip = (page - 1) * limit;
 
-  const searchFilter: any = { isDraft: false };
+  const searchFilter: any = {};
 
   if (query) {
-    const safeQuery = escapeRegex(query as string);
-    searchFilter.title = { $regex: safeQuery, $options: "i" };
+    searchFilter.$text = { $search: query as string };
   }
 
   if (categoryName) {
@@ -328,12 +278,15 @@ export const searchPosts = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
-  const posts = await Post.find(searchFilter)
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .populate("category", "name slug")
-    .populate("tags", "name");
+  let postsQuery = Post.find(searchFilter);
+
+  if (query) {
+    postsQuery = postsQuery.select({ score: { $meta: "textScore" } }).sort({ score: { $meta: "textScore" } });
+  } else {
+    postsQuery = postsQuery.sort({ createdAt: -1 });
+  }
+
+  const posts = await postsQuery.skip(skip).limit(limit).populate("category", "name slug").populate("tags", "name");
 
   const total = await Post.countDocuments(searchFilter);
   res.status(200).json({
@@ -343,78 +296,142 @@ export const searchPosts = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-// 7. Get Trending Posts
+// 7. Get Trending Posts (Cascading: 24h -> 7 Days -> Latest)
+// UPDATED: Now fetches exactly 3 posts max.
 export const getTrendingPosts = asyncHandler(async (req: Request, res: Response) => {
-  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const now = new Date();
+  const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const trendingStats = await PostView.aggregate([
-    { $match: { createdAt: { $gte: twentyFourHoursAgo } } },
-    { $group: { _id: "$post", viewCount: { $sum: 1 } } },
-    { $sort: { viewCount: -1 } },
-    { $limit: 10 },
-    {
-      $lookup: {
-        from: "posts",
-        localField: "_id",
-        foreignField: "_id",
-        as: "postDetails",
-      },
-    },
-    { $unwind: "$postDetails" },
-    {
-      $lookup: {
-        from: "categories",
-        localField: "postDetails.category",
-        foreignField: "_id",
-        as: "categoryDetails",
-      },
-    },
-    { $unwind: { path: "$categoryDetails", preserveNullAndEmptyArrays: true } },
-    {
-      $project: {
-        _id: 1,
-        viewCount: 1,
-        "postDetails.title": 1,
-        "postDetails.image": 1,
-        "postDetails.createdAt": 1,
-        "postDetails.slug": 1,
-        category: {
-          name: "$categoryDetails.name",
-          slug: "$categoryDetails.slug",
+  let finalPosts: any[] = [];
+  let collectedIds: Types.ObjectId[] = [];
+
+  const fetchTrending = async (startTime: Date, excludeIds: Types.ObjectId[], limit: number) => {
+    return PostView.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startTime },
+          post: { $nin: excludeIds },
         },
       },
-    },
-  ]);
+      { $group: { _id: "$post", viewCount: { $sum: 1 } } },
+      { $sort: { viewCount: -1 } },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: "posts",
+          localField: "_id",
+          foreignField: "_id",
+          as: "postDetails",
+        },
+      },
+      { $unwind: "$postDetails" },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "postDetails.category",
+          foreignField: "_id",
+          as: "categoryDetails",
+        },
+      },
+      { $unwind: { path: "$categoryDetails", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 1,
+          viewCount: 1,
+          "postDetails.title": 1,
+          "postDetails.image": 1,
+          "postDetails.createdAt": 1,
+          "postDetails.slug": 1,
+          category: {
+            name: "$categoryDetails.name",
+            slug: "$categoryDetails.slug",
+          },
+        },
+      },
+    ]);
+  };
 
-  res.status(200).json({ success: true, data: trendingStats });
+  // STEP 1: 24h (Try to get 3)
+  const trending24h = await fetchTrending(twentyFourHoursAgo, [], 3);
+  finalPosts = [...trending24h];
+  collectedIds = finalPosts.map((p) => p._id);
+
+  // STEP 2: 7 Days (Fill remaining if < 3)
+  if (finalPosts.length < 3) {
+    const needed = 3 - finalPosts.length;
+    const trending7d = await fetchTrending(sevenDaysAgo, collectedIds, needed);
+    finalPosts = [...finalPosts, ...trending7d];
+    collectedIds = finalPosts.map((p) => p._id);
+  }
+
+  // STEP 3: Fallback (Fill remaining if < 3)
+  if (finalPosts.length < 3) {
+    const needed = 3 - finalPosts.length;
+
+    const fallbackPosts = await Post.find({
+      _id: { $nin: collectedIds },
+    })
+      .sort({ createdAt: -1 })
+      .limit(needed)
+      .populate("category", "name slug");
+
+    const formattedFallback = fallbackPosts.map((post: any) => ({
+      _id: post._id,
+      viewCount: 0,
+      postDetails: {
+        title: post.title,
+        image: post.image,
+        createdAt: post.createdAt,
+        slug: post.slug,
+      },
+      category: {
+        name: post.category?.name || "Uncategorized",
+        slug: post.category?.slug || "",
+      },
+    }));
+
+    finalPosts = [...finalPosts, ...formattedFallback];
+  }
+
+  res.status(200).json({ success: true, data: finalPosts });
 });
 
-// 8. Get Posts By Category (Dedicated Route)
-// Usage: GET /api/posts/category/:slugOrId
-export const getPostsByCategory = asyncHandler(async (req: Request, res: Response) => {
-  const { slugOrId } = req.params; // We expect the route to be /category/:slugOrId
+// 8. Get Posts by Filter (Smart Endpoint)
+export const getPostsByFilter = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
   const skip = (page - 1) * limit;
 
-  let categoryId: any;
+  let filter: any = {};
+  let filterType = "all";
+  let filterName = "All Posts";
 
-  // 1. Determine if input is an ID or a Slug
-  if (Types.ObjectId.isValid(slugOrId)) {
-    // It's a valid ObjectId, assume it's an ID
-    categoryId = slugOrId;
+  if (id === "all") {
+    // Keep defaults
   } else {
-    // It's a Slug (e.g., "international-news")
-    const category = await Category.findOne({ slug: slugOrId });
-    if (!category) {
-      throw createError("Category not found", 404);
+    if (!Types.ObjectId.isValid(id)) {
+      throw createError("Invalid ID format. Must be a valid MongoDB ObjectId or 'all'.", 400);
     }
-    categoryId = category._id;
-  }
 
-  // 2. Fetch Posts for this Category
-  // We strictly filter by this category and usually exclude drafts for public view
-  const filter = { category: categoryId, isDraft: false };
+    const category = await Category.findById(id);
+
+    if (category) {
+      filter.category = category._id;
+      filterType = "category";
+      filterName = category.name;
+    } else {
+      const tag = await Tag.findById(id);
+      if (tag) {
+        filter.tags = tag._id;
+        filterType = "tag";
+        filterName = tag.name;
+      } else {
+        throw createError("No Category or Tag found with this ID", 404);
+      }
+    }
+  }
 
   const posts = await Post.find(filter)
     .sort({ createdAt: -1 })
@@ -429,7 +446,11 @@ export const getPostsByCategory = asyncHandler(async (req: Request, res: Respons
   res.status(200).json({
     success: true,
     data: posts,
-    categoryName: slugOrId, // Helpful for frontend to know which category was fetched
+    meta: {
+      filterType,
+      filterName,
+      filterId: id,
+    },
     pagination: { total, page, limit, pages: Math.ceil(total / limit) },
   });
 });

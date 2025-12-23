@@ -9,6 +9,18 @@ interface CustomRequest extends Request {
   files?: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] };
 }
 
+// ==========================================
+// HELPERS
+// ==========================================
+
+// Helper: Non-blocking file deletion
+// Prevents server freeze during high traffic
+const safeDelete = (path: string) => {
+  fs.unlink(path, (err) => {
+    if (err) console.error(`Failed to delete file at ${path}:`, err);
+  });
+};
+
 const getFile = (req: CustomRequest): Express.Multer.File | undefined => {
   if (Array.isArray(req.files) && req.files.length > 0) return req.files[0];
   if (req.files && typeof req.files === "object") {
@@ -18,27 +30,34 @@ const getFile = (req: CustomRequest): Express.Multer.File | undefined => {
   return undefined;
 };
 
+// ==========================================
+// CONTROLLERS
+// ==========================================
+
 // 1. Create Ad
 export const createAd = asyncHandler(async (req: CustomRequest, res: Response) => {
   const { title, type, link, isActive } = req.body;
   const file = getFile(req);
 
-  // FIX 1: Cleanup file if text validation fails
+  // FIX 1: Cleanup file if text validation fails (Non-blocking)
   if (!title || !type || !link) {
-    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    if (file) safeDelete(file.path);
     throw createError("Title, type, and link are required", 400);
   }
 
-  // FIX 2: Cleanup file if Enum validation fails
+  // FIX 2: Cleanup file if Enum validation fails (Non-blocking)
   if (!["horizontal", "square"].includes(type)) {
-    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    if (file) safeDelete(file.path);
     throw createError("Invalid type. Must be 'horizontal' or 'square'", 400);
   }
 
   if (!file) throw createError("Ad image is required", 400);
 
+  // Upload
   const imageData = await uploadToCloudinary(file.path, "news-ads");
-  if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+
+  // Cleanup local file immediately (Non-blocking)
+  if (file) safeDelete(file.path);
 
   try {
     const ad = await Ad.create({
@@ -77,8 +96,8 @@ export const updateAd = asyncHandler(async (req: CustomRequest, res: Response) =
 
   const ad = await Ad.findById(id);
   if (!ad) {
-    // FIX 3: Cleanup file if Ad not found
-    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    // FIX 3: Cleanup file if Ad not found (Non-blocking)
+    if (file) safeDelete(file.path);
     throw createError("Ad not found", 404);
   }
 
@@ -89,7 +108,7 @@ export const updateAd = asyncHandler(async (req: CustomRequest, res: Response) =
     if (file) {
       imageData = await uploadToCloudinary(file.path, "news-ads");
       newImageUploaded = true;
-      if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      if (file) safeDelete(file.path);
     }
 
     const updatedAd = await Ad.findByIdAndUpdate(
@@ -104,17 +123,19 @@ export const updateAd = asyncHandler(async (req: CustomRequest, res: Response) =
       { new: true }
     );
 
+    // If new image success, delete OLD image from cloud
     if (file && ad.image?.publicId) {
       await deleteFromCloudinary(ad.image.publicId);
     }
 
     res.status(200).json({ success: true, message: "Ad updated", data: updatedAd });
   } catch (error) {
+    // If update fails, delete NEW image from cloud
     if (newImageUploaded && imageData.publicId) {
       await deleteFromCloudinary(imageData.publicId);
     }
-    // Also ensure local file is cleaned
-    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    // Double check local file is gone
+    if (file) safeDelete(file.path);
     throw error;
   }
 });

@@ -196,7 +196,7 @@ export const resetPassword = asyncHandler(async (req: Request, res: Response) =>
   if (!email || !password) throw createError("Email and password are required", 400);
   if (password.length < 8) throw createError("Password must be at least 8 characters", 400);
 
-  const admin = await Admin.findOne({ email }).select("+password +resetSessionActive +resetSessionExpiry +otpVerified");
+  const admin = await Admin.findOne({ email }).select("+resetSessionActive +resetSessionExpiry +otpVerified");
   if (!admin) throw createError("Admin not found.", 404);
 
   // Verification Check
@@ -305,4 +305,30 @@ export const changePassword = asyncHandler(async (req: Request, res: Response) =
   await admin.save();
 
   res.status(200).json({ success: true, message: "Password changed successfully" });
+});
+
+// 9. NEW: UPDATE USERNAME
+export const updateUsername = asyncHandler(async (req: Request, res: Response) => {
+  const { username } = req.body;
+
+  if (!username) {
+    throw createError("Username is required", 400);
+  }
+
+  // Validation matching schema rules
+  if (username.length < 2 || username.length > 30) {
+    throw createError("Username must be between 2 and 30 characters", 400);
+  }
+
+  const admin = await Admin.findById(req.admin?.id);
+  if (!admin) throw createError("Admin not found", 404);
+
+  admin.username = username;
+  await admin.save();
+
+  res.status(200).json({
+    success: true,
+    message: "Username updated successfully",
+    data: { username: admin.username },
+  });
 });
