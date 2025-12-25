@@ -35,7 +35,7 @@ export async function sendEmail(to: string, type: EmailTemplate, data: string) {
     // 2. Send Email via HTTP API (Bypasses Render's SMTP Block)
     const response = await resend.emails.send({
       from: "onboarding@resend.dev", // Use this for testing, or your verified domain
-      to: to,
+      to: "bobsani8232@gmail.com",
       subject: subject,
       html: emailHtml,
     });
