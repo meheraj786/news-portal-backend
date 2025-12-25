@@ -1,8 +1,9 @@
 import nodemailer from "nodemailer";
 import { verificationEmailTemplate } from "../templates/verificationEmail";
 
+// FIX: Changed 'service' to 'host'
 const transporter = nodemailer.createTransport({
-  service: "smtp.gmail.com",
+  host: "smtp.gmail.com",
   port: 465,
   secure: true,
   auth: {
@@ -12,9 +13,9 @@ const transporter = nodemailer.createTransport({
 });
 
 // Type for Email Templates
-type EmailTemplate = "verification" | "passwordReset"; // Extend with more templates as needed
+type EmailTemplate = "verification" | "passwordReset";
 
-// Function to get the correct email subject based on template type
+// Function to get the correct email subject
 const getEmailSubject = (template: EmailTemplate) => {
   switch (template) {
     case "verification":
@@ -48,6 +49,7 @@ export async function sendEmail(to: string, type: EmailTemplate, data: string) {
       subject: subject,
       html: emailHtml,
     });
+    console.log(`Email sent successfully to ${to}`);
   } catch (err) {
     console.error("Error sending email:", err);
     throw new Error("Failed to send email. Please try again later.");
