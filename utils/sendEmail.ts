@@ -4,11 +4,14 @@ import { verificationEmailTemplate } from "../templates/verificationEmail";
 // FIX: Changed 'service' to 'host'
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
+  port: 587, // CHANGE to 587
+  secure: false, // MUST be false for 587
   auth: {
     user: process.env.EMAIL_FROM_ADDRESS,
     pass: process.env.EMAIL_APP_PASSWORD,
+  },
+  tls: {
+    ciphers: "SSLv3", // Helps with some Google handshake issues
   },
 });
 
