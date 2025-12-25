@@ -32,12 +32,8 @@ export async function sendEmail(to: string, type: EmailTemplate, data: string) {
     const emailHtml = getEmailTemplate(type, data);
 
     const response = await resend.emails.send({
-      // 👇 I UPDATED THIS WITH YOUR REAL DOMAIN FROM THE SCREENSHOT
-      from: "noreply@send.protidinjonotarnews.com",
-
-      // ✅ Now allowed to send to ANYONE (Real Production Mode)
+      from: "noreply@protidinjonotarnews.com",
       to: to,
-
       subject: subject,
       html: emailHtml,
     });
