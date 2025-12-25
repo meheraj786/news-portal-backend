@@ -1,19 +1,29 @@
 import nodemailer from "nodemailer";
 import { verificationEmailTemplate } from "../templates/verificationEmail";
 
-// FIX: Switch to Port 587 (STARTTLS) to bypass Cloud Firewall blocks
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 587,
-  secure: false,
+  secure: false, // Must be false for port 587
   auth: {
     user: process.env.EMAIL_FROM_ADDRESS,
     pass: process.env.EMAIL_APP_PASSWORD,
   },
   tls: {
     rejectUnauthorized: false,
+    ciphers: "SSLv3",
   },
-  // ADD THESE TWO LINES 👇
+  // --- CRITICAL FIXES BELOW ---
+  // 1. Force simple connection behavior
+  ignoreTLS: false,
+  requireTLS: true,
+
+  // 2. Add timeouts to stop the "hanging"
+  connectionTimeout: 10000, // 10 seconds
+  greetingTimeout: 10000, // 10 seconds
+  socketTimeout: 10000, // 10 seconds
+
+  // 3. Enable Debugging (So we can see the exact conversation)
   logger: true,
   debug: true,
 });
