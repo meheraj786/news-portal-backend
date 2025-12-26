@@ -245,7 +245,14 @@ export const logout = (req: Request, res: Response) => {
 // ------------------ PROFILE --------------------------------
 
 export const getMe = asyncHandler(async (req: Request, res: Response) => {
+  // 👇 FIX: Tell browser "Never remember this response"
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+
   const admin = await Admin.findById(req.admin?.id);
+
+  // If the middleware passed, but the ID doesn't exist in DB anymore
   if (!admin) throw createError("Admin account not found", 404);
 
   res.status(200).json({ success: true, data: admin });
