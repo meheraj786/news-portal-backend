@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
 import { createError } from "../utils/createError";
 import Category from "../models/categorySchema";
-import SubCategory from "../models/subCategorySchema"; // Must import to check safety
 import { Post } from "../models/postSchema";
 import { asyncHandler } from "../utils/asyncHandler";
 
@@ -13,7 +12,6 @@ export const createCategory = asyncHandler(async (req: Request, res: Response) =
   const existing = await Category.findOne({ name });
   if (existing) throw createError("Category already exists", 409);
 
-  // We rely on the Model's pre('save') hook to generate the slug
   const category = new Category({
     name,
     description: description || null,
@@ -23,29 +21,42 @@ export const createCategory = asyncHandler(async (req: Request, res: Response) =
   res.status(201).json({ success: true, message: "Category created", data: category });
 });
 
-// 2. Get All Categories (With SubCategories populated safely)
+// 2. Get All Categories (With Pagination)
 export const getAllCategories = asyncHandler(async (req: Request, res: Response) => {
-  const categories = await Category.find({ isActive: true })
-    .populate({
-      path: "subCategories", // Uses the Virtual field
-      select: "name slug isActive",
-      match: { isActive: true },
-    })
-    .sort({ createdAt: -1 });
+  // Pagination Logic
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const skip = (page - 1) * limit;
 
-  res.status(200).json({ success: true, count: categories.length, data: categories });
+  // Query
+  const categories = await Category.find({ isActive: true }).sort({ createdAt: -1 }).skip(skip).limit(limit);
+
+  // Total Count for Frontend Pagination
+  const total = await Category.countDocuments({ isActive: true });
+
+  res.status(200).json({
+    success: true,
+    count: categories.length,
+    data: categories,
+    pagination: {
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    },
+  });
 });
 
 // 3. Get Category By ID
 export const getCategoryById = asyncHandler(async (req: Request, res: Response) => {
-  const category = await Category.findById(req.params.id).populate("subCategories");
+  const category = await Category.findById(req.params.id);
   if (!category) throw createError("Category not found", 404);
   res.status(200).json({ success: true, data: category });
 });
 
-// 4. Get Category By Slug (Frontend URL friendly)
+// 4. Get Category By Slug
 export const getCategoryBySlug = asyncHandler(async (req: Request, res: Response) => {
-  const category = await Category.findOne({ slug: req.params.slug }).populate("subCategories");
+  const category = await Category.findOne({ slug: req.params.slug });
   if (!category) throw createError("Category not found", 404);
   res.status(200).json({ success: true, data: category });
 });
@@ -94,13 +105,7 @@ export const deleteCategory = asyncHandler(async (req: Request, res: Response) =
   const category = await Category.findById(id);
   if (!category) throw createError("Category not found", 404);
 
-  // Safety: Check if subcategories exist (returns 0 if you don't use them)
-  const subCount = await SubCategory.countDocuments({ category: id });
-  if (subCount > 0) {
-    throw createError("Cannot delete: This category has subcategories.", 400);
-  }
-
-  // Safety: Check if Posts exist
+  // Safety: Check if Posts exist (We still check this to prevent orphaned posts)
   const postCount = await Post.countDocuments({ category: id });
   if (postCount > 0) {
     throw createError(`Cannot delete: This category is used in ${postCount} posts.`, 400);
