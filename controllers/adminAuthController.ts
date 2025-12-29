@@ -39,7 +39,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   res.cookie("accessToken", accessToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: "none",
     maxAge: 365 * 24 * 60 * 60 * 1000, // 1 year
   });
 
@@ -229,12 +229,15 @@ export const resetPassword = asyncHandler(async (req: Request, res: Response) =>
 
 // 5. LOGOUT
 export const logout = (req: Request, res: Response) => {
+  // Option 1: Clear with your specific settings (The standard way)
   res.clearCookie("accessToken", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    secure: true,
+    sameSite: "none",
     path: "/",
   });
+
+  res.clearCookie("accessToken");
 
   res.status(200).json({
     success: true,
@@ -245,7 +248,14 @@ export const logout = (req: Request, res: Response) => {
 // ------------------ PROFILE --------------------------------
 
 export const getMe = asyncHandler(async (req: Request, res: Response) => {
+  // 👇 FIX: Tell browser "Never remember this response"
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+
   const admin = await Admin.findById(req.admin?.id);
+
+  // If the middleware passed, but the ID doesn't exist in DB anymore
   if (!admin) throw createError("Admin account not found", 404);
 
   res.status(200).json({ success: true, data: admin });

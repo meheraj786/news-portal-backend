@@ -18,12 +18,6 @@ declare global {
 
 export const verifyAuthToken = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // 2. Runtime Safety Check
-    if (!process.env.JWT_SECRET) {
-      console.error("FATAL ERROR: JWT_SECRET is not defined in .env");
-      return next(createError("Internal Server Error: Auth Config Missing", 500));
-    }
-
     const token = req.cookies?.accessToken || req.headers.authorization?.split(" ")[1];
 
     if (!token) {
@@ -32,7 +26,7 @@ export const verifyAuthToken = async (req: Request, res: Response, next: NextFun
 
     // 3. Verify Token
     // We cast to 'any' because standard JwtPayload doesn't know about our 'id' field
-    const decoded = jwt.verify(token, process.env.JWT_SECRET) as any;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
 
     // 4. SECURITY FIX: Check if user still exists in DB!
     // This prevents deleted admins from accessing the system using an old token.

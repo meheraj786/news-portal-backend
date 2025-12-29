@@ -22,11 +22,6 @@ export const verificationEmailTemplate = (otp: string) => `
     <center style="width: 100%; background-color: #f7f7f7;">
         <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px;" class="email-container">
             <tr>
-                <td style="padding: 40px 0 30px 0; text-align: center;">
-                    <img src="../public/logo.png" alt="NewsPortal Logo" width="120" style="font-family: sans-serif; font-size: 24px; color: #ffffff;">
-                </td>
-            </tr>
-            <tr>
                 <td bgcolor="#ffffff" style="padding: 40px 30px; border-radius: 12px; text-align: center;">
                     <table border="0" cellpadding="0" cellspacing="0" width="100%">
                         <tr>

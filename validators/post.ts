@@ -9,7 +9,6 @@ export const postSchema = z.object({
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
   isDraft: z.boolean().optional(),
-  tags: z.array(z.string()).optional(),
   views: z.number().optional(),
 });
 

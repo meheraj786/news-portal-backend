@@ -11,7 +11,6 @@ export interface IPost extends Document {
   subCategory?: Types.ObjectId;
   tags: Types.ObjectId[];
   views: number;
-  isFavourite: boolean;
 }
 
 const postSchema = new Schema<IPost>(
@@ -59,11 +58,6 @@ const postSchema = new Schema<IPost>(
       type: Number,
       default: 0,
       min: 0,
-    },
-    isFavourite: {
-      type: Boolean,
-      default: false,
-      index: true,
     },
   },
   {

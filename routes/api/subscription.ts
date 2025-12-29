@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyAuthToken } from "../../middleware/authMddleware";
+import { verifyAuthToken } from "../../middleware/authMiddleware";
 import { deleteSubscription, getAllSubscriptions, subscribe } from "../../controllers/subscriptionController";
 
 const subscriptionRoutes = express.Router();

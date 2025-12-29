@@ -4,7 +4,6 @@ export interface ICategory extends Document {
   name: string;
   slug: string;
   description?: string;
-  subCategories: mongoose.Types.ObjectId[];
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -30,12 +29,6 @@ const categorySchema = new Schema<ICategory>(
       trim: true,
       maxlength: [200, "Description cannot exceed 200 characters"],
     },
-    subCategories: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "SubCategory",
-      },
-    ],
     isActive: {
       type: Boolean,
       default: true,
