@@ -21,29 +21,15 @@ export const createCategory = asyncHandler(async (req: Request, res: Response) =
   res.status(201).json({ success: true, message: "Category created", data: category });
 });
 
-// 2. Get All Categories (With Pagination)
+// 2. Get All Categories (NO Pagination - Returns List)
 export const getAllCategories = asyncHandler(async (req: Request, res: Response) => {
-  // Pagination Logic
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 10;
-  const skip = (page - 1) * limit;
-
-  // Query
-  const categories = await Category.find({ isActive: true }).sort({ createdAt: -1 }).skip(skip).limit(limit);
-
-  // Total Count for Frontend Pagination
-  const total = await Category.countDocuments({ isActive: true });
+  // Simply fetch all active categories
+  const categories = await Category.find({ isActive: true }).sort({ createdAt: -1 });
 
   res.status(200).json({
     success: true,
     count: categories.length,
     data: categories,
-    pagination: {
-      total,
-      page,
-      limit,
-      pages: Math.ceil(total / limit),
-    },
   });
 });
 
